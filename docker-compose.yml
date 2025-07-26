@@ -13,6 +13,7 @@ services:
     stop_grace_period: 60s
     volumes:
       - ~/sharelatex_data:/var/lib/overleaf
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       OVERLEAF_APP_NAME: Overleaf Community Edition
       OVERLEAF_MONGO_URL: mongodb://mongo/sharelatex
@@ -26,23 +27,23 @@ services:
       SANDBOXED_COMPILES_HOST_DIR_OUTPUT: '/home/user/sharelatex_data/data/output'
       DOCKER_RUNNER: 'true'
       SANDBOXED_COMPILES_SIBLING_CONTAINERS: 'true'
+      OVERLEAF_ALLOW_PUBLIC_REGISTRATION: 'true'
+      OVERLEAF_ALLOW_ANONYMOUS_READ_AND_WRITE_SHARING: 'true'
+      OVERLEAF_ADMIN_EMAIL: 'me@checcoconf.it'
+      OVERLEAF_LEGACY_REGISTER_PAGE: 'true'
 
   mongo:
-    restart: always
     image: mongo:6.0
-    container_name: mongo
-    command: '--replSet overleaf'
+    command: mongod --replSet overleaf --bind_ip_all
     volumes:
       - ~/mongo_data:/data/db
-      - ./bin/shared/mongodb-init-replica-set.js:/docker-entrypoint-initdb.d/mongodb-init-replica-set.js
-    environment:
-      MONGO_INITDB_DATABASE: sharelatex
+      - ./mongo/mongo-init-replica.js:/docker-entrypoint-initdb.d/mongo-init-replica.js
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok === 1 && rs.status().ok === 1 ? 'ok' : 'error'"]
+      interval: 15s
+      timeout: 15s
+      retries: 10
+      
   redis:
     restart: always
     image: redis:6.2
