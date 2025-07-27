@@ -9,7 +9,7 @@ services:
       redis:
         condition: service_started
     ports:
-      - 8000:80
+      - "8080:80"
     stop_grace_period: 60s
     volumes:
       - ./data:/var/lib/overleaf
@@ -35,19 +35,27 @@ services:
 
   mongo:
     image: mongo:6.0
-    command: mongod --replSet overleaf --bind_ip_all
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
     volumes:
-      - ./data/db:/data/db
-      - ./mongo-init-replica/init-replica.js:/docker-entrypoint-initdb.d/mongo-init-replica.js
+      - ./mongo-init-replica/init-replica.js:/docker-entrypoint-initdb.d/init-replica.js:ro
+      - mongo-data:/data/db
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok === 1 && rs.status().ok === 1 ? 'ok' : 'error'"]
-      interval: 15s
-      timeout: 15s
-      retries: 10
-      
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis:
-    restart: always
+    restart: unless-stopped
     image: redis:6.2
     container_name: redis
+    ports:
+      - "6379:6379"
     volumes:
       - ~/redis_data:/data
+
+volumes:
+  mongo-data:
