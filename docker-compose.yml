@@ -4,10 +4,8 @@ services:
     image: sharelatex/sharelatex
     container_name: sharelatex
     depends_on:
-      mongo:
-        condition: service_healthy
-      redis:
-        condition: service_started
+      - mongo
+      - redis
     ports:
       - "8080:80"
     stop_grace_period: 60s
@@ -33,7 +31,7 @@ services:
       OVERLEAF_ADMIN_EMAIL: 'me@checcoconf.it'
       OVERLEAF_LEGACY_REGISTER_PAGE: 'true'
     networks:
-      - overleaf-net  
+      - overleaf-net
 
   mongo:
     image: mongo:6.0
@@ -44,10 +42,9 @@ services:
       - mongo-data:/data/db
       - ./init-replica.sh:/docker-entrypoint-initdb.d/init-replica.sh
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
-    healthcheck:
-      disable: true
     networks:
       - overleaf-net
+
   redis:
     restart: unless-stopped
     image: redis:6.2
@@ -57,7 +54,7 @@ services:
     volumes:
       - ~/redis_data:/data
     networks:
-      - overleaf-net  
+      - overleaf-net
 
 volumes:
   mongo-data:
