@@ -43,10 +43,10 @@ services:
       - mongo-data:/data/db
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     healthcheck:
-    test: ["CMD", "mongo", "--eval", "rs.status().ok"]
-    interval: 10s
-    timeout: 10s
-    retries: 5
+      test: ["CMD", "mongo", "--eval", "rs.status().ok"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
 
   redis:
     restart: unless-stopped
