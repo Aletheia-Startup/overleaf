@@ -7,7 +7,7 @@ services:
       - mongo
       - redis
     ports:
-      - "8080:80"
+      - "8081:80"
     stop_grace_period: 60s
     volumes:
       - ./data:/var/lib/overleaf
