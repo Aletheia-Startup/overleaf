@@ -1,25 +1,49 @@
 #!/bin/bash
 
-# Aspetta che mongo sia pronto
-until mongo --eval "print('mongo is up')" > /dev/null 2>&1
+set -e
+
+echo "Waiting for MongoDB to be available..."
+
+until mongo --host mongo --eval "print('Mongo is up')" &>/dev/null
 do
-  echo "Waiting for Mongo to be available..."
+  echo "$(date) - Waiting for MongoDB..."
   sleep 2
 done
 
-# Controlla se replica set è già inizializzato
-if ! mongo --eval "rs.status().ok" | grep 1 > /dev/null 2>&1; then
-  echo "Initiating replica set..."
-  mongo --eval '
-    rs.initiate({
-      _id: "rs0",
-      members: [{ _id: 0, host: "mongo:27017" }]
-    })
-  '
-else
-  echo "Replica set already initialized."
-fi
+echo "MongoDB is up, trying to initiate replica set..."
 
-# Mostra stato replica set
-echo "Checking replica set status..."
-mongo --eval 'rs.status()'
+# Funzione per iniziare il replica set con retry
+init_replica_set() {
+  mongo --host mongo --eval '
+    try {
+      rs.initiate({
+        _id: "rs0",
+        members: [{ _id: 0, host: "mongo:27017" }]
+      });
+      print("Replica set initiated successfully");
+    } catch (e) {
+      print("Replica set initiation failed: " + e);
+      quit(1);
+    }
+  '
+}
+
+MAX_RETRIES=10
+COUNT=0
+
+until init_replica_set
+do
+  COUNT=$((COUNT+1))
+  if [ "$COUNT" -ge "$MAX_RETRIES" ]; then
+    echo "Failed to initiate replica set after $MAX_RETRIES attempts. Exiting."
+    exit 1
+  fi
+  echo "Retrying replica set initiation in 5 seconds..."
+  sleep 5
+done
+
+echo "Replica set initiated, checking status..."
+
+mongo --host mongo --eval 'rs.status()'
+
+echo "Replica set is ready!"
