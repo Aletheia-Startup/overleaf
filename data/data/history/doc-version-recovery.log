@@ -1,0 +1,12 @@
+Using settings from /etc/overleaf/settings.js
+Set UV_THREADPOOL_SIZE=16
+{"name":"default","hostname":"21f19e06070d","pid":168,"level":30,"backend":"fs","msg":"Loading backend","time":"2025-07-27T10:09:31.066Z","v":0}
+(node:168) NOTE: The AWS SDK for JavaScript (v2) is in maintenance mode.
+ SDK releases are limited to address critical bug fixes and security issues only.
+
+Please migrate your code to use AWS SDK for JavaScript (v3).
+For more information, check the blog post at https://a.co/cUPnyil
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"name":"default","hostname":"21f19e06070d","pid":168,"level":40,"err":{"message":"The AWS SDK for JavaScript (v2) is in maintenance mode.\n SDK releases are limited to address critical bug fixes and security issues only.\n\nPlease migrate your code to use AWS SDK for JavaScript (v3).\nFor more information, check the blog post at https://a.co/cUPnyil","name":"NOTE","stack":"NOTE: The AWS SDK for JavaScript (v2) is in maintenance mode.\n SDK releases are limited to address critical bug fixes and security issues only.\n\nPlease migrate your code to use AWS SDK for JavaScript (v3).\nFor more information, check the blog post at https://a.co/cUPnyil\n    at emitWarning (/overleaf/libraries/object-persistor/node_modules/aws-sdk/lib/maintenance_mode_message.js:38:13)\n    at Timeout._onTimeout (/overleaf/libraries/object-persistor/node_modules/aws-sdk/lib/maintenance_mode_message.js:46:5)\n    at listOnTimeout (node:internal/timers:588:17)\n    at process.processTimers (node:internal/timers:523:7)","info":{}},"msg":"Warning details","time":"2025-07-27T10:09:31.236Z","v":0}
+Done.
+Flushing log queue.
