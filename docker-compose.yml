@@ -16,7 +16,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       OVERLEAF_APP_NAME: Overleaf Community Edition
-      OVERLEAF_MONGO_URL: mongodb://mongo/sharelatex
+      OVERLEAF_MONGO_URL: mongodb://mongo/sharelatex?replicaSet=rs0
       OVERLEAF_REDIS_HOST: redis
       REDIS_HOST: redis
       ENABLED_LINKED_FILE_TYPES: 'project_file,project_output_file'
