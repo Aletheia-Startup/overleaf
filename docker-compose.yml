@@ -12,7 +12,7 @@ services:
       - 8080:80
     stop_grace_period: 60s
     volumes:
-      - ~/sharelatex_data:/var/lib/overleaf
+      - ./data:/var/lib/overleaf
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       OVERLEAF_APP_NAME: Overleaf Community Edition
@@ -22,11 +22,12 @@ services:
       ENABLED_LINKED_FILE_TYPES: 'project_file,project_output_file'
       ENABLE_CONVERSIONS: 'true'
       EMAIL_CONFIRMATION_DISABLED: 'true'
-      SANDBOXED_COMPILES: 'true'
+      SANDBOXED_COMPILES: 'false'
       SANDBOXED_COMPILES_HOST_DIR_COMPILES: '/home/user/sharelatex_data/data/compiles'
       SANDBOXED_COMPILES_HOST_DIR_OUTPUT: '/home/user/sharelatex_data/data/output'
-      DOCKER_RUNNER: 'true'
-      SANDBOXED_COMPILES_SIBLING_CONTAINERS: 'true'
+      SIBLING_CONTAINERS_ENABLED: 'false'
+      DOCKER_RUNNER: ''
+      SANDBOXED_COMPILES_SIBLING_CONTAINERS: 'false'
       OVERLEAF_ALLOW_PUBLIC_REGISTRATION: 'true'
       OVERLEAF_ALLOW_ANONYMOUS_READ_AND_WRITE_SHARING: 'true'
       OVERLEAF_ADMIN_EMAIL: 'me@checcoconf.it'
