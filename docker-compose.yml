@@ -37,7 +37,7 @@ services:
     image: mongo:6.0
     command: mongod --replSet overleaf --bind_ip_all
     volumes:
-      - ~/mongo_data:/data/db
+      - ./data/db:/data/db
       - ./mongo/mongo-init-replica.js:/docker-entrypoint-initdb.d/mongo-init-replica.js
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok === 1 && rs.status().ok === 1 ? 'ok' : 'error'"]
