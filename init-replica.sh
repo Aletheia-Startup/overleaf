@@ -4,7 +4,7 @@ set -e
 
 echo "Waiting for MongoDB to be available..."
 
-until mongo --host mongo --eval "print('Mongo is up')" &>/dev/null
+until mongosh --host mongo --eval "print('Mongo is up')" &>/dev/null
 do
   echo "$(date) - Waiting for MongoDB..."
   sleep 2
@@ -12,9 +12,8 @@ done
 
 echo "MongoDB is up, trying to initiate replica set..."
 
-# Funzione per iniziare il replica set con retry
 init_replica_set() {
-  mongo --host mongo --eval '
+  mongosh --host mongo --eval '
     try {
       rs.initiate({
         _id: "rs0",
@@ -23,7 +22,7 @@ init_replica_set() {
       print("Replica set initiated successfully");
     } catch (e) {
       print("Replica set initiation failed: " + e);
-      quit(1);
+      process.exit(1);
     }
   '
 }
@@ -44,6 +43,6 @@ done
 
 echo "Replica set initiated, checking status..."
 
-mongo --host mongo --eval 'rs.status()'
+mongosh --host mongo --eval 'rs.status()'
 
 echo "Replica set is ready!"
