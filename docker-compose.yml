@@ -32,6 +32,8 @@ services:
       OVERLEAF_ALLOW_ANONYMOUS_READ_AND_WRITE_SHARING: 'true'
       OVERLEAF_ADMIN_EMAIL: 'me@checcoconf.it'
       OVERLEAF_LEGACY_REGISTER_PAGE: 'true'
+    networks:
+      - overleaf-net  
 
   mongo:
     image: mongo:6.0
@@ -39,15 +41,16 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - ./mongo-init-replica/init-replica.js:/docker-entrypoint-initdb.d/init-replica.js:ro
       - mongo-data:/data/db
+      - ./init-replica.sh:/docker-entrypoint-initdb.d/init-replica.sh
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     healthcheck:
       test: ["CMD", "mongo", "--eval", "rs.status().ok"]
       interval: 10s
       timeout: 10s
       retries: 5
-
+    networks:
+      - overleaf-net
   redis:
     restart: unless-stopped
     image: redis:6.2
@@ -56,6 +59,12 @@ services:
       - "6379:6379"
     volumes:
       - ~/redis_data:/data
+    networks:
+      - overleaf-net  
 
 volumes:
   mongo-data:
+
+networks:
+  overleaf-net:
+    driver: bridge
