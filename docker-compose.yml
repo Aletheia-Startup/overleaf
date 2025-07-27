@@ -9,7 +9,7 @@ services:
       redis:
         condition: service_started
     ports:
-      - 8080:80
+      - 8080:8080
     stop_grace_period: 60s
     volumes:
       - ./data:/var/lib/overleaf
