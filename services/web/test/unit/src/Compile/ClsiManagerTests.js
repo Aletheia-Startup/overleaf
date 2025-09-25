@@ -59,7 +59,21 @@ describe('ClsiManager', function () {
     this.newClsiServerId = 'newserver'
     this.rawOutputFiles = {}
     this.responseBody = {
-      compile: { status: 'success' },
+      compile: {
+        status: 'success',
+        stats: {
+          isInitialCompile: 1,
+          restoredClsiCache: 1,
+        },
+        timings: { compileE2E: 1337 },
+        outputFiles: [
+          {
+            path: 'output.pdf',
+            size: 42,
+            url: 'http://localhost:3013/snip/output.pdf',
+          },
+        ],
+      },
     }
     this.response = {
       ok: true,
@@ -128,6 +142,7 @@ describe('ClsiManager', function () {
       },
       inc: sinon.stub(),
       count: sinon.stub(),
+      histogram: sinon.stub(),
     }
     this.Settings = {
       apis: {
@@ -139,8 +154,8 @@ describe('ClsiManager', function () {
           url: `http://${CLSI_HOST}`,
           submissionBackendClass: 'n2d',
         },
-        clsi_priority: {
-          url: 'https://clsipremium.example.com',
+        clsi_new: {
+          sample: 100,
         },
       },
       enablePdfCaching: true,
@@ -149,28 +164,28 @@ describe('ClsiManager', function () {
     this.ClsiCacheHandler = {
       clearCache: sinon.stub().resolves(),
     }
-    this.Features = {
-      hasFeature: sinon.stub().withArgs('project-history-blobs').returns(true),
-    }
     this.HistoryManager = {
-      getBlobLocation: sinon.stub().callsFake((historyId, hash) => {
+      getFilestoreBlobURL: sinon.stub().callsFake((historyId, hash) => {
         if (hash === GLOBAL_BLOB_HASH) {
-          return {
-            bucket: 'global-blobs',
-            key: 'aa/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          }
+          return `${FILESTORE_URL}/history/global/hash/${hash}`
         }
-        return { bucket: 'project-blobs', key: `${historyId}/${hash}` }
+        return `${FILESTORE_URL}/history/project/${historyId}/hash/${hash}`
       }),
+    }
+    this.SplitTestHandler = {
+      getPercentile: sinon.stub().returns(42),
+    }
+    this.AnalyticsManager = {
+      recordEventForUserInBackground: sinon.stub(),
     }
 
     this.ClsiManager = SandboxedModule.require(MODULE_PATH, {
       requires: {
         '@overleaf/settings': this.Settings,
+        '../SplitTests/SplitTestHandler': this.SplitTestHandler,
         '../../models/Project': {
           Project: this.Project,
         },
-        '../../infrastructure/Features': this.Features,
         '../Project/ProjectEntityHandler': this.ProjectEntityHandler,
         '../Project/ProjectGetter': this.ProjectGetter,
         '../DocumentUpdater/DocumentUpdaterHandler':
@@ -182,6 +197,7 @@ describe('ClsiManager', function () {
         './ClsiFormatChecker': this.ClsiFormatChecker,
         '@overleaf/metrics': this.Metrics,
         '../History/HistoryManager': this.HistoryManager,
+        '../Analytics/AnalyticsManager': this.AnalyticsManager,
       },
     })
   })
@@ -221,7 +237,7 @@ describe('ClsiManager', function () {
           this.project._id,
           this.user_id,
           {
-            compileBackendClass: 'e2',
+            compileBackendClass: 'n2d',
             compileGroup: 'standard',
             timeout: this.timeout,
           }
@@ -235,7 +251,7 @@ describe('ClsiManager', function () {
               url.host === CLSI_HOST &&
               url.pathname ===
                 `/project/${this.project._id}/user/${this.user_id}/compile` &&
-              url.searchParams.get('compileBackendClass') === 'e2' &&
+              url.searchParams.get('compileBackendClass') === 'n2d' &&
               url.searchParams.get('compileGroup') === 'standard'
           ),
           {
@@ -315,7 +331,7 @@ describe('ClsiManager', function () {
           this.project._id,
           this.user_id,
           'standard',
-          'e2',
+          'n2d',
           this.newClsiServerId
         )
       })
@@ -358,7 +374,7 @@ describe('ClsiManager', function () {
         this.result = await this.ClsiManager.promises.sendRequest(
           this.project._id,
           this.user_id,
-          { compileBackendClass: 'e2', compileGroup: 'standard' }
+          { compileBackendClass: 'n2d', compileGroup: 'standard' }
         )
       })
 
@@ -393,7 +409,7 @@ describe('ClsiManager', function () {
           {
             timeout: 100,
             incrementalCompilesEnabled: true,
-            compileBackendClass: 'e2',
+            compileBackendClass: 'n2d',
             compileGroup: 'priority',
             compileFromClsiCache: true,
             populateClsiCache: true,
@@ -440,7 +456,7 @@ describe('ClsiManager', function () {
               url.hostname === CLSI_HOST &&
               url.pathname ===
                 `/project/${this.project._id}/user/${this.user_id}/compile` &&
-              url.searchParams.get('compileBackendClass') === 'e2' &&
+              url.searchParams.get('compileBackendClass') === 'n2d' &&
               url.searchParams.get('compileGroup') === 'priority'
           ),
           {
@@ -797,8 +813,8 @@ describe('ClsiManager', function () {
           this.project._id,
           this.user_id,
           {
-            compileBackendClass: 'e2',
-            compileGroup: 'standard',
+            compileBackendClass: 'c2d',
+            compileGroup: 'priority',
           }
         )
         // wait for the background task to finish
@@ -813,17 +829,33 @@ describe('ClsiManager', function () {
               url.host === CLSI_HOST &&
               url.pathname ===
                 `/project/${this.project._id}/user/${this.user_id}/compile` &&
-              url.searchParams.get('compileBackendClass') === 'e2' &&
-              url.searchParams.get('compileGroup') === 'standard'
+              url.searchParams.get('compileBackendClass') === 'c2d' &&
+              url.searchParams.get('compileGroup') === 'priority'
           )
         )
         expect(this.FetchUtils.fetchStringWithResponse).to.have.been.calledWith(
           sinon.match(
             url =>
               url.toString() ===
-              `${this.Settings.apis.clsi_new.url}/project/${this.project._id}/user/${this.user_id}/compile?compileBackendClass=e2&compileGroup=standard`
+              `${this.Settings.apis.clsi_new.url}/project/${this.project._id}/user/${this.user_id}/compile?compileBackendClass=c4d&compileGroup=priority`
           )
         )
+      })
+      it('should record an event', function () {
+        expect(
+          this.AnalyticsManager.recordEventForUserInBackground
+        ).to.have.been.calledWith(this.user_id, 'double-compile-result', {
+          projectId: 'project-id',
+          compileBackendClass: 'c2d',
+          newCompileBackendClass: 'c4d',
+          status: 'success',
+          compileTime: 1337,
+          newCompileTime: 1337,
+          clsiServerId: 'newserver',
+          newClsiServerId: 'clsi-server-id',
+          pdfSize: 42,
+          newPdfSize: 42,
+        })
       })
     })
   })
@@ -859,7 +891,7 @@ describe('ClsiManager', function () {
         this.result = await this.ClsiManager.promises.sendExternalRequest(
           this.submissionId,
           this.clsiRequest,
-          { compileBackendClass: 'e2', compileGroup: 'standard' }
+          { compileBackendClass: 'n2d', compileGroup: 'standard' }
         )
       })
 
@@ -869,7 +901,7 @@ describe('ClsiManager', function () {
             url =>
               url.host === CLSI_HOST &&
               url.pathname === `/project/${this.submissionId}/compile` &&
-              url.searchParams.get('compileBackendClass') === 'e2' &&
+              url.searchParams.get('compileBackendClass') === 'n2d' &&
               url.searchParams.get('compileGroup') === 'standard'
           ),
           {
@@ -934,7 +966,7 @@ describe('ClsiManager', function () {
         await this.ClsiManager.promises.deleteAuxFiles(
           this.project._id,
           this.user_id,
-          { compileBackendClass: 'e2', compileGroup: 'standard' },
+          { compileBackendClass: 'n2d', compileGroup: 'standard' },
           'node-1'
         )
       })
@@ -946,7 +978,7 @@ describe('ClsiManager', function () {
               url.host === CLSI_HOST &&
               url.pathname ===
                 `/project/${this.project._id}/user/${this.user_id}` &&
-              url.searchParams.get('compileBackendClass') === 'e2' &&
+              url.searchParams.get('compileBackendClass') === 'n2d' &&
               url.searchParams.get('compileGroup') === 'standard' &&
               url.searchParams.get('clsiserverid') === 'node-1'
           ),
@@ -977,6 +1009,47 @@ describe('ClsiManager', function () {
           .called
       })
     })
+
+    describe('when a new backend is configured', function () {
+      beforeEach(async function () {
+        this.Settings.apis.clsi_new = { url: 'https://compiles.somewhere.test' }
+        await this.ClsiManager.promises.deleteAuxFiles(
+          this.project._id,
+          this.user_id,
+          { compileBackendClass: 'c2d', compileGroup: 'priority' },
+          'node-1'
+        )
+        // wait for the background task to finish
+        await setTimeout(0)
+      })
+
+      it('should forward delete request', function () {
+        expect(this.FetchUtils.fetchString).to.have.been.calledWith(
+          sinon.match(
+            url =>
+              url.host === CLSI_HOST &&
+              url.pathname ===
+                `/project/${this.project._id}/user/${this.user_id}` &&
+              url.searchParams.get('compileBackendClass') === 'c2d' &&
+              url.searchParams.get('compileGroup') === 'priority' &&
+              url.searchParams.get('clsiserverid') === 'node-1'
+          ),
+          { method: 'DELETE' }
+        )
+        expect(this.FetchUtils.fetchStringWithResponse).to.have.been.calledWith(
+          sinon.match(
+            url =>
+              url.host === 'compiles.somewhere.test' &&
+              url.pathname ===
+                `/project/${this.project._id}/user/${this.user_id}` &&
+              url.searchParams.get('compileBackendClass') === 'c4d' &&
+              url.searchParams.get('compileGroup') === 'priority' &&
+              !url.searchParams.has('clsiserverid')
+          ),
+          sinon.match({ method: 'DELETE' })
+        )
+      })
+    })
   })
 
   describe('wordCount', function () {
@@ -986,7 +1059,7 @@ describe('ClsiManager', function () {
           this.project._id,
           this.user_id,
           false,
-          { compileBackendClass: 'e2', compileGroup: 'standard' },
+          { compileBackendClass: 'n2d', compileGroup: 'standard' },
           'node-1'
         )
       })
@@ -996,7 +1069,7 @@ describe('ClsiManager', function () {
           sinon.match(
             url =>
               url.toString() ===
-              `http://clsi.example.com/project/${this.project._id}/user/${this.user_id}/wordcount?compileBackendClass=e2&compileGroup=standard&file=main.tex&image=mock-image-name&clsiserverid=node-1`
+              `http://clsi.example.com/project/${this.project._id}/user/${this.user_id}/wordcount?compileBackendClass=n2d&compileGroup=standard&file=main.tex&image=mock-image-name&clsiserverid=node-1`
           )
         )
       })
@@ -1013,7 +1086,7 @@ describe('ClsiManager', function () {
           this.project._id,
           this.user_id,
           'other.tex',
-          { compileBackendClass: 'e2', compileGroup: 'standard' },
+          { compileBackendClass: 'n2d', compileGroup: 'standard' },
           'node-2'
         )
       })
@@ -1025,7 +1098,7 @@ describe('ClsiManager', function () {
               url.host === CLSI_HOST &&
               url.pathname ===
                 `/project/${this.project._id}/user/${this.user_id}/wordcount` &&
-              url.searchParams.get('compileBackendClass') === 'e2' &&
+              url.searchParams.get('compileBackendClass') === 'n2d' &&
               url.searchParams.get('compileGroup') === 'standard' &&
               url.searchParams.get('clsiserverid') === 'node-2' &&
               url.searchParams.get('file') === 'other.tex' &&
@@ -1037,6 +1110,38 @@ describe('ClsiManager', function () {
       it('should not persist a cookie on response', function () {
         expect(this.ClsiCookieManager.promises.setServerId).not.to.have.been
           .called
+      })
+    })
+
+    describe('when a new backend is configured', function () {
+      beforeEach(async function () {
+        this.Settings.apis.clsi_new = { url: 'https://compiles.somewhere.test' }
+        await this.ClsiManager.promises.wordCount(
+          this.project._id,
+          this.user_id,
+          false,
+          { compileBackendClass: 'c2d', compileGroup: 'priority' },
+          'node-1'
+        )
+        // wait for the background task to finish
+        await setTimeout(0)
+      })
+
+      it('should forward wordcount request', function () {
+        expect(this.FetchUtils.fetchString).to.have.been.calledWith(
+          sinon.match(
+            url =>
+              url.toString() ===
+              `http://clsi.example.com/project/${this.project._id}/user/${this.user_id}/wordcount?compileBackendClass=c2d&compileGroup=priority&file=main.tex&image=mock-image-name&clsiserverid=node-1`
+          )
+        )
+        expect(this.FetchUtils.fetchStringWithResponse).to.have.been.calledWith(
+          sinon.match(
+            url =>
+              url.toString() ===
+              `${this.Settings.apis.clsi_new.url}/project/${this.project._id}/user/${this.user_id}/wordcount?compileBackendClass=c4d&compileGroup=priority&file=main.tex&image=mock-image-name`
+          )
+        )
       })
     })
   })
@@ -1051,20 +1156,15 @@ function _makeResources(project, docs, files) {
     })
   }
   for (const [path, file] of Object.entries(files)) {
-    let url, fallbackURL
+    let url
     if (file.hash === GLOBAL_BLOB_HASH) {
-      url = `${FILESTORE_URL}/bucket/global-blobs/key/aa/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
-      fallbackURL = `${FILESTORE_URL}/project/${project._id}/file/${file._id}`
-    } else if (file.hash) {
-      url = `${FILESTORE_URL}/bucket/project-blobs/key/${project.overleaf.history.id}/${file.hash}`
-      fallbackURL = `${FILESTORE_URL}/project/${project._id}/file/${file._id}`
+      url = `${FILESTORE_URL}/history/global/hash/${file.hash}`
     } else {
-      url = `${FILESTORE_URL}/project/${project._id}/file/${file._id}`
+      url = `${FILESTORE_URL}/history/project/${project.overleaf.history.id}/hash/${file.hash}`
     }
     resources.push({
       path: path.replace(/^\//, ''),
       url,
-      fallbackURL,
       modified: file.created.getTime(),
     })
   }

@@ -45,9 +45,9 @@ import { useMetadataContext } from '@/features/ide-react/context/metadata-contex
 import { useUserContext } from '@/shared/context/user-context'
 import { useReferencesContext } from '@/features/ide-react/context/references-context'
 import { setMathPreview } from '@/features/source-editor/extensions/math-preview'
-import { useRangesContext } from '@/features/review-panel-new/context/ranges-context'
+import { useRangesContext } from '@/features/review-panel/context/ranges-context'
 import { updateRanges } from '@/features/source-editor/extensions/ranges'
-import { useThreadsContext } from '@/features/review-panel-new/context/threads-context'
+import { useThreadsContext } from '@/features/review-panel/context/threads-context'
 import { useHunspell } from '@/features/source-editor/hooks/use-hunspell'
 import { Permissions } from '@/features/ide-react/types/permissions'
 import { GotoOffsetOptions } from '@/features/ide-react/context/editor-manager-context'
@@ -104,7 +104,7 @@ function useCodeMirrorScope(view: EditorView) {
 
   const { showVisual: visual, trackChanges } = useEditorPropertiesContext()
 
-  const { referenceKeys } = useReferencesContext()
+  const { referenceKeys, searchLocalReferences } = useReferencesContext()
 
   const ranges = useRangesContext()
   const threads = useThreadsContext()
@@ -227,6 +227,7 @@ function useCodeMirrorScope(view: EditorView) {
   const metadataRef = useRef({
     ...metadata,
     referenceKeys,
+    searchLocalReferences,
     fileTreeData,
   })
 
@@ -245,6 +246,14 @@ function useCodeMirrorScope(view: EditorView) {
       view.dispatch(setMetadata(metadataRef.current))
     })
   }, [view, referenceKeys])
+
+  // listen to project reference search updates
+  useEffect(() => {
+    metadataRef.current.searchLocalReferences = searchLocalReferences
+    window.setTimeout(() => {
+      view.dispatch(setMetadata(metadataRef.current))
+    })
+  }, [view, searchLocalReferences])
 
   // listen to project root folder updates
   useEffect(() => {

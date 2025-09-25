@@ -2,6 +2,7 @@ const { expect } = require('chai')
 const SandboxedModule = require('sandboxed-module')
 const path = require('path')
 const sinon = require('sinon')
+const { ObjectId } = require('mongodb-legacy')
 const modulePath = path.join(
   __dirname,
   '../../../../app/src/Features/Institutions/InstitutionsAPI'
@@ -33,6 +34,13 @@ describe('InstitutionsAPI', function () {
               .returns(this.ipMatcherNotification),
           },
         },
+        '../../infrastructure/Modules': (this.Modules = {
+          promises: {
+            hooks: {
+              fire: sinon.stub(),
+            },
+          },
+        }),
       },
     })
 
@@ -118,8 +126,15 @@ describe('InstitutionsAPI', function () {
   })
 
   describe('getUserAffiliations', function () {
-    it('get affiliations', async function () {
-      const responseBody = [{ foo: 'bar' }]
+    it('get affiliations with commons', async function () {
+      const responseBody = [
+        {
+          foo: 'bar',
+          institution: {
+            commonsAccount: true,
+          },
+        },
+      ]
       this.request.callsArgWith(1, null, { statusCode: 201 }, responseBody)
       const body = await this.InstitutionsAPI.promises.getUserAffiliations(
         this.stubbedUser._id
@@ -130,8 +145,55 @@ describe('InstitutionsAPI', function () {
       requestOptions.url.should.equal(expectedUrl)
       requestOptions.method.should.equal('GET')
       requestOptions.maxAttempts.should.equal(3)
+      this.Modules.promises.hooks.fire.should.have.been.called
       expect(requestOptions.body).not.to.exist
-      body.should.equal(responseBody)
+      expect(body).to.deep.equal(responseBody)
+    })
+
+    it('get affiliations with domain capture for groups', async function () {
+      const responseBody = [
+        {
+          id: '123abc',
+          foo: 'bar',
+          institution: {
+            commonsAccount: false,
+          },
+        },
+      ]
+      this.request.callsArgWith(1, null, { statusCode: 201 }, responseBody)
+      const groupResponse = {
+        _id: new ObjectId(),
+        managedUsersEnabled: false,
+        domainCaptureEnabled: true,
+      }
+      this.Modules.promises.hooks.fire
+        .withArgs(
+          'getGroupWithDomainCaptureByV1Id',
+          responseBody[0].institution.id
+        )
+        .resolves([groupResponse])
+      const body = await this.InstitutionsAPI.promises.getUserAffiliations(
+        this.stubbedUser._id
+      )
+      this.request.calledOnce.should.equal(true)
+      const requestOptions = this.request.lastCall.args[0]
+      const expectedUrl = `v1.url/api/v2/users/${this.stubbedUser._id}/affiliations`
+      requestOptions.url.should.equal(expectedUrl)
+      requestOptions.method.should.equal('GET')
+      requestOptions.maxAttempts.should.equal(3)
+      this.Modules.promises.hooks.fire.should.have.been.calledWith(
+        'getGroupWithDomainCaptureByV1Id',
+        responseBody[0].institution.id
+      )
+      expect(requestOptions.body).not.to.exist
+      expect(body).to.deep.equal([
+        {
+          ...responseBody[0],
+          group: {
+            ...groupResponse,
+          },
+        },
+      ])
     })
 
     it('handle error', async function () {

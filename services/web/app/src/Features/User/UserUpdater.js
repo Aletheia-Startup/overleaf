@@ -13,11 +13,14 @@ const Errors = require('../Errors/Errors')
 const NewsletterManager = require('../Newsletter/NewsletterManager')
 const UserAuditLogHandler = require('./UserAuditLogHandler')
 const AnalyticsManager = require('../Analytics/AnalyticsManager')
+const EmailChangeHelper = require('../Analytics/EmailChangeHelper')
 const SubscriptionLocator = require('../Subscription/SubscriptionLocator')
 const NotificationsBuilder = require('../Notifications/NotificationsBuilder')
 const _ = require('lodash')
 const Modules = require('../../infrastructure/Modules')
 const UserSessionsManager = require('./UserSessionsManager')
+const ThirdPartyIdentityManager = require('./ThirdPartyIdentityManager')
+const AsyncLocalStorage = require('../../infrastructure/AsyncLocalStorage')
 
 async function _sendSecurityAlertPrimaryEmailChanged(
   userId,
@@ -79,6 +82,7 @@ async function _sendSecurityAlertPrimaryEmailChanged(
  * or any other user
  */
 async function addEmailAddress(userId, newEmail, affiliationOptions, auditLog) {
+  AsyncLocalStorage.removeItem('userFullEmails')
   newEmail = EmailHelper.parseEmail(newEmail)
   if (!newEmail) {
     throw new Error('invalid email')
@@ -111,16 +115,37 @@ async function addEmailAddress(userId, newEmail, affiliationOptions, auditLog) {
     throw OError.tag(error, 'problem adding affiliation while adding email')
   }
 
+  const createdAt = new Date()
+  let res
   try {
     const reversedHostname = newEmail.split('@')[1].split('').reverse().join('')
     const update = {
       $push: {
-        emails: { email: newEmail, createdAt: new Date(), reversedHostname },
+        emails: { email: newEmail, createdAt, reversedHostname },
       },
     }
-    await updateUser({ _id: userId, 'emails.email': { $ne: newEmail } }, update)
+    res = await updateUser(
+      { _id: userId, 'emails.email': { $ne: newEmail } },
+      update
+    )
   } catch (error) {
     throw OError.tag(error, 'problem updating users emails')
+  }
+
+  if (res.matchedCount !== 1) {
+    return
+  }
+
+  try {
+    await EmailChangeHelper.registerEmailCreation(userId, newEmail, {
+      createdAt: new Date(),
+      emailCreatedAt: createdAt,
+    })
+  } catch (error) {
+    logger.warn(
+      { error, userId, newEmail },
+      'Error registering email creation with analytics'
+    )
   }
 }
 
@@ -162,6 +187,26 @@ async function clearSAMLData(userId, auditLog, sendEmail) {
   }
 }
 
+async function clearThirdPartyIdentifiers(userId, auditLog) {
+  const user = await UserGetter.promises.getUser(userId, {
+    thirdPartyIdentifiers: 1,
+  })
+  await UserAuditLogHandler.promises.addEntry(
+    userId,
+    'clear-third-party-identifiers',
+    auditLog.initiatorId,
+    auditLog.ipAddress,
+    {}
+  )
+  for (const thirdPartyIdentifier of user.thirdPartyIdentifiers || []) {
+    await ThirdPartyIdentityManager.promises.unlink(
+      userId,
+      thirdPartyIdentifier.providerId,
+      auditLog
+    )
+  }
+}
+
 /**
  * set the default email address by setting the `email` attribute. The email
  * must be one of the user's multiple emails (`emails` attribute)
@@ -174,6 +219,7 @@ async function setDefaultEmailAddress(
   sendSecurityAlert,
   deleteOldEmail = false
 ) {
+  AsyncLocalStorage.removeItem('userFullEmails')
   email = EmailHelper.parseEmail(email)
   if (email == null) {
     throw new Error('invalid email')
@@ -220,6 +266,19 @@ async function setDefaultEmailAddress(
     userId,
     'primary-email-address-updated'
   )
+
+  try {
+    await EmailChangeHelper.registerEmailUpdate(userId, email, {
+      isPrimary: true,
+      action: 'updated',
+      createdAt: new Date(),
+    })
+  } catch (err) {
+    logger.warn(
+      { err, userId, email },
+      'Error registering email change with analytics'
+    )
+  }
 
   if (sendSecurityAlert) {
     // no need to wait, errors are logged and not passed back
@@ -314,6 +373,7 @@ async function migrateDefaultEmailAddress(
 }
 
 async function confirmEmail(userId, email, affiliationOptions) {
+  AsyncLocalStorage.removeItem('userFullEmails')
   // used for initial email confirmation (non-SSO and SSO)
   // also used for reconfirmation of non-SSO emails
   const confirmedAt = new Date()
@@ -362,6 +422,20 @@ async function confirmEmail(userId, email, affiliationOptions) {
     throw new Errors.NotFoundError('user id and email do no match')
   }
   await FeaturesUpdater.promises.refreshFeatures(userId, 'confirm-email')
+
+  try {
+    await EmailChangeHelper.registerEmailUpdate(userId, email, {
+      emailConfirmedAt: confirmedAt,
+      action: 'updated',
+      isPrimary: false,
+    })
+  } catch (error) {
+    logger.warn(
+      { error, userId, email },
+      'Error registering email confirmation with analytics'
+    )
+  }
+
   try {
     await maybeCreateRedundantSubscriptionNotification(userId, email)
   } catch (error) {
@@ -403,6 +477,7 @@ async function removeEmailAddress(
   auditLog,
   skipParseEmail = false
 ) {
+  AsyncLocalStorage.removeItem('userFullEmails')
   // remove one of the user's email addresses. The email cannot be the user's
   // default email address
   if (!skipParseEmail) {
@@ -456,6 +531,18 @@ async function removeEmailAddress(
     throw new Error('Cannot remove email')
   }
 
+  try {
+    await EmailChangeHelper.registerEmailDeletion(userId, email, {
+      isPrimary: false,
+      emailDeletedAt: new Date(),
+    })
+  } catch (error) {
+    logger.warn(
+      { error, userId, email },
+      'Error registering email deletion with analytics'
+    )
+  }
+
   await FeaturesUpdater.promises.refreshFeatures(userId, 'remove-email')
 }
 
@@ -464,6 +551,7 @@ async function addAffiliationForNewUser(
   email,
   affiliationOptions = {}
 ) {
+  AsyncLocalStorage.removeItem('userFullEmails')
   await InstitutionsAPI.promises.addAffiliation(
     userId,
     email,
@@ -612,6 +700,7 @@ module.exports = {
     addEmailAddress,
     changeEmailAddress,
     clearSAMLData,
+    clearThirdPartyIdentifiers,
     confirmEmail,
     removeEmailAddress,
     removeReconfirmFlag,

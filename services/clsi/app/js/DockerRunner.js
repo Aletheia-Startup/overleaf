@@ -213,11 +213,8 @@ const DockerRunner = {
   ) {
     const timeoutInSeconds = timeout / 1000
 
-    const dockerVolumes = {}
     for (const hostVol in volumes) {
       const dockerVol = volumes[hostVol]
-      dockerVolumes[dockerVol] = {}
-
       if (volumes[hostVol].slice(-3).indexOf(':r') === -1) {
         volumes[hostVol] = `${dockerVol}:rw`
       }
@@ -233,12 +230,13 @@ const DockerRunner = {
     }
     // set the path based on the image year
     const match = image.match(/:([0-9]+)\.[0-9]+/)
-    const year = match ? match[1] : '2014'
+    // the rolling build does not follow our <year>.<version>.<patch> convention
+    const year = match ? match[1] : 'rolling'
+
     env.PATH = `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/texlive/${year}/bin/x86_64-linux/`
     const options = {
       Cmd: command,
       Image: image,
-      Volumes: dockerVolumes,
       WorkingDir: '/compile',
       NetworkDisabled: true,
       Memory: 1024 * 1024 * 1024 * 1024, // 1 Gb

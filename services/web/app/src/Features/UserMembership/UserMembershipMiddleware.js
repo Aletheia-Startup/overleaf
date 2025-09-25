@@ -1,3 +1,5 @@
+// @ts-check
+
 const { expressify } = require('@overleaf/promise-utils')
 const async = require('async')
 const UserMembershipAuthorization = require('./UserMembershipAuthorization')
@@ -7,6 +9,8 @@ const EntityConfigs = require('./UserMembershipEntityConfigs')
 const Errors = require('../Errors/Errors')
 const HttpErrorHandler = require('../Errors/HttpErrorHandler')
 const TemplatesManager = require('../Templates/TemplatesManager')
+const { z, zz, validateReq } = require('../../infrastructure/Validation')
+const { useAdminCapabilities } = require('../Helpers/AdminAuthorizationHelper')
 
 // set of middleware arrays or functions that checks user access to an entity
 // (publisher, institution, group, template, etc.)
@@ -31,22 +35,44 @@ const UserMembershipMiddleware = {
     requireEntity(),
   ],
 
-  requireGroupMemberAccess: [
+  requireEntityAccess: ({ entityName, staffAccess, adminCapability }) => [
     AuthenticationController.requireLogin(),
-    fetchEntityConfig('groupMember'),
+    fetchEntityConfig(entityName),
     fetchEntity(),
     requireEntity(),
-    allowAccessIfAny([UserMembershipAuthorization.hasEntityAccess()]),
+    allowAccessIfAny(
+      [
+        UserMembershipAuthorization.hasEntityAccess(),
+        staffAccess && UserMembershipAuthorization.hasStaffAccess(staffAccess),
+        adminCapability &&
+          UserMembershipAuthorization.hasAdminCapability(adminCapability),
+      ].filter(Boolean)
+    ),
   ],
 
-  requireGroupManagementAccess: [
+  requireEntityAccessOrAdminAccess: entityName => [
     AuthenticationController.requireLogin(),
-    fetchEntityConfig('group'),
+    fetchEntityConfig(entityName),
     fetchEntity(),
     requireEntity(),
     allowAccessIfAny([
       UserMembershipAuthorization.hasEntityAccess(),
       UserMembershipAuthorization.hasStaffAccess('groupManagement'),
+      // allow to all admins when `adminRolesEnabled` is true
+      UserMembershipAuthorization.hasAnyAdminRole,
+    ]),
+  ],
+
+  requireGroupMemberManagement: entityName => [
+    AuthenticationController.requireLogin(),
+    fetchEntityConfig(entityName),
+    fetchEntity(),
+    requireEntity(),
+    useAdminCapabilities,
+    allowAccessIfAny([
+      UserMembershipAuthorization.hasEntityAccess(),
+      UserMembershipAuthorization.hasStaffAccess('groupManagement'),
+      UserMembershipAuthorization.hasModifyGroupMemberCapability,
     ]),
   ],
 
@@ -58,28 +84,6 @@ const UserMembershipMiddleware = {
     allowAccessIfAny([
       UserMembershipAuthorization.hasEntityAccess(),
       UserMembershipAuthorization.hasStaffAccess('groupMetrics'),
-    ]),
-  ],
-
-  requireGroupManagersManagementAccess: [
-    AuthenticationController.requireLogin(),
-    fetchEntityConfig('groupManagers'),
-    fetchEntity(),
-    requireEntity(),
-    allowAccessIfAny([
-      UserMembershipAuthorization.hasEntityAccess(),
-      UserMembershipAuthorization.hasStaffAccess('groupManagement'),
-    ]),
-  ],
-
-  requireGroupAdminAccess: [
-    AuthenticationController.requireLogin(),
-    fetchEntityConfig('groupAdmin'),
-    fetchEntity(),
-    requireEntity(),
-    allowAccessIfAny([
-      UserMembershipAuthorization.hasEntityAccess(),
-      UserMembershipAuthorization.hasStaffAccess('groupManagement'),
     ]),
   ],
 
@@ -185,16 +189,20 @@ const UserMembershipMiddleware = {
 
   requireSplitTestMetricsAccess: [
     AuthenticationController.requireLogin(),
+    useAdminCapabilities,
     allowAccessIfAny([
       UserMembershipAuthorization.hasStaffAccess('splitTestMetrics'),
       UserMembershipAuthorization.hasStaffAccess('splitTestManagement'),
+      UserMembershipAuthorization.hasAdminCapability('view-split-test'),
     ]),
   ],
 
   requireSplitTestManagementAccess: [
     AuthenticationController.requireLogin(),
+    useAdminCapabilities,
     allowAccessIfAny([
       UserMembershipAuthorization.hasStaffAccess('splitTestManagement'),
+      UserMembershipAuthorization.hasAdminCapability('modify-split-test'),
     ]),
   ],
 
@@ -238,12 +246,45 @@ function fetchEntityConfig(entityName) {
   }
 }
 
+const SlugEntitySchema = z.object({
+  entityName: z.literal('publisher'),
+  params: z.object({
+    id: z.string(), // slug
+  }),
+})
+
+const PostgresIdEntitySchema = z.object({
+  entityName: z.literal(['institution', 'team']),
+  params: z.object({
+    id: z.coerce.number().positive(),
+  }),
+})
+
+const ObjectIdEntitySchema = z.object({
+  entityName: z.literal([
+    'group',
+    'groupAdmin',
+    'groupManagers',
+    'groupMember',
+  ]),
+  params: z.object({
+    id: zz.coercedObjectId(),
+  }),
+})
+
+const fetchEntitySchema = z.discriminatedUnion('entityName', [
+  SlugEntitySchema,
+  ObjectIdEntitySchema,
+  PostgresIdEntitySchema,
+])
+
 // fetch the entity with id and config, and set it in the request
 function fetchEntity() {
   return expressify(async (req, res, next) => {
+    const { params } = validateReq(req, fetchEntitySchema)
     req.entity =
       await UserMembershipHandler.promises.getEntityWithoutAuthorizationCheck(
-        req.params.id,
+        params.id,
         req.entityConfig
       )
     next()

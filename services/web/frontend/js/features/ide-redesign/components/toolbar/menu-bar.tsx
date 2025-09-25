@@ -2,7 +2,7 @@ import {
   DropdownDivider,
   DropdownHeader,
   DropdownItem,
-} from '@/features/ui/components/bootstrap-5/dropdown-menu'
+} from '@/shared/components/dropdown/dropdown-menu'
 import { MenuBar } from '@/shared/components/menu-bar/menu-bar'
 import { MenuBarDropdown } from '@/shared/components/menu-bar/menu-bar-dropdown'
 import { MenuBarOption } from '@/shared/components/menu-bar/menu-bar-option'
@@ -12,7 +12,7 @@ import { MouseEventHandler, useCallback, useMemo, useState } from 'react'
 import { useIdeRedesignSwitcherContext } from '@/features/ide-react/context/ide-redesign-switcher-context'
 import { useSwitchEnableNewEditorState } from '../../hooks/use-switch-enable-new-editor-state'
 import MaterialIcon from '@/shared/components/material-icon'
-import OLSpinner from '@/features/ui/components/ol/ol-spinner'
+import OLSpinner from '@/shared/components/ol/ol-spinner'
 import { useLayoutContext } from '@/shared/context/layout-context'
 import { useCommandProvider } from '@/features/ide-react/hooks/use-command-provider'
 import CommandDropdown, {
@@ -27,6 +27,10 @@ import { useDetachCompileContext as useCompileContext } from '@/shared/context/d
 import { useEditorAnalytics } from '@/shared/hooks/use-editor-analytics'
 import { useProjectSettingsContext } from '@/features/editor-left-menu/context/project-settings-context'
 import { useSurveyUrl } from '../../hooks/use-survey-url'
+import getMeta from '@/utils/meta'
+import EditorCloneProjectModalWrapper from '@/features/clone-project-modal/components/editor-clone-project-modal-wrapper'
+import useOpenProject from '@/shared/hooks/use-open-project'
+import { canUseNewEditorViaPrimaryFeatureFlag } from '../../utils/new-editor-utils'
 
 export const ToolbarMenuBar = () => {
   const { t } = useTranslation()
@@ -38,6 +42,11 @@ export const ToolbarMenuBar = () => {
   const { pdfUrl } = useCompileContext()
   const wordCountEnabled = pdfUrl || isSplitTestEnabled('word-count-client')
   const [showWordCountModal, setShowWordCountModal] = useState(false)
+  const [showCloneProjectModal, setShowCloneProjectModal] = useState(false)
+  const openProject = useOpenProject()
+  const showEditorSwitchMenuOption = canUseNewEditorViaPrimaryFeatureFlag()
+
+  const anonymous = getMeta('ol-anonymous')
 
   useCommandProvider(
     () => [
@@ -58,16 +67,26 @@ export const ToolbarMenuBar = () => {
         },
         id: 'word_count',
       },
+      {
+        type: 'command',
+        label: t('make_a_copy'),
+        disabled: anonymous,
+        handler: () => {
+          setShowCloneProjectModal(true)
+        },
+        id: 'copy_project',
+      },
     ],
-    [t, setView, view, wordCountEnabled]
+    [t, setView, view, wordCountEnabled, anonymous]
   )
   const fileMenuStructure: MenuStructure = useMemo(
     () => [
       {
         id: 'file-file-tree',
-        children: ['new_file', 'new_folder', 'upload_file'],
+        children: ['new_file', 'new_folder', 'upload_file', 'copy_project'],
       },
       { id: 'file-tools', children: ['show_version_history', 'word_count'] },
+      { id: 'submit', children: ['submit-project'] },
       {
         id: 'file-download',
         children: ['download-as-source-zip', 'download-pdf'],
@@ -233,8 +252,10 @@ export const ToolbarMenuBar = () => {
             }
             onClick={toggleMathPreview}
           />
-          <DropdownDivider />
-          <CommandSection section={pdfControlsMenuSectionStructure} />
+          <CommandSection
+            section={pdfControlsMenuSectionStructure}
+            includeDivider
+          />
         </MenuBarDropdown>
         <CommandDropdown
           menu={formatMenuStructure}
@@ -264,25 +285,34 @@ export const ToolbarMenuBar = () => {
             title={t('contact_us')}
             onClick={openContactUsModal}
           />
-          <MenuBarOption
-            eventKey="give_feedback"
-            title={t('give_feedback')}
-            href={surveyURL}
-            target="_blank"
-            rel="noopener noreferrer"
-          />
-          <DropdownDivider />
-          <SwitchToOldEditorMenuBarOption />
-          <MenuBarOption
-            eventKey="whats_new"
-            title="What's new?"
-            onClick={openEditorRedesignSwitcherModal}
-          />
+          {showEditorSwitchMenuOption && (
+            <>
+              <MenuBarOption
+                eventKey="give_feedback"
+                title={t('give_feedback')}
+                href={surveyURL}
+                target="_blank"
+                rel="noopener noreferrer"
+              />
+              <DropdownDivider />
+              <SwitchToOldEditorMenuBarOption />
+              <MenuBarOption
+                eventKey="whats_new"
+                title="What's new?"
+                onClick={openEditorRedesignSwitcherModal}
+              />
+            </>
+          )}
         </MenuBarDropdown>
       </MenuBar>
       <WordCountModal
         show={showWordCountModal}
         handleHide={() => setShowWordCountModal(false)}
+      />
+      <EditorCloneProjectModalWrapper
+        show={showCloneProjectModal}
+        handleHide={() => setShowCloneProjectModal(false)}
+        openProject={openProject}
       />
     </>
   )

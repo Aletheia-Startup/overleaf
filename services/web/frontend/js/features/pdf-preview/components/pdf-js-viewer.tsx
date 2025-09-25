@@ -9,17 +9,17 @@ import withErrorBoundary from '../../../infrastructure/error-boundary'
 import PdfPreviewErrorBoundaryFallback from './pdf-preview-error-boundary-fallback'
 import { useDetachCompileContext as useCompileContext } from '../../../shared/context/detach-compile-context'
 import { captureException } from '../../../infrastructure/error-reporter'
-import * as eventTracking from '../../../infrastructure/event-tracking'
 import { getPdfCachingMetrics } from '../util/metrics'
 import { debugConsole } from '@/utils/debugging'
 import { usePdfPreviewContext } from '@/features/pdf-preview/components/pdf-preview-provider'
 import usePresentationMode from '../hooks/use-presentation-mode'
 import useMouseWheelZoom from '../hooks/use-mouse-wheel-zoom'
 import { PDFJS } from '../util/pdf-js'
+import { PDFFile } from '@ol-types/compile'
 
 type PdfJsViewerProps = {
   url: string
-  pdfFile: Record<string, any>
+  pdfFile: PDFFile
 }
 
 function PdfJsViewer({ url, pdfFile }: PdfJsViewerProps) {
@@ -261,14 +261,12 @@ function PdfJsViewer({ url, pdfFile }: PdfJsViewerProps) {
             )
 
             if (clickPosition) {
-              eventTracking.sendMB('jump-to-location', {
-                direction: 'pdf-location-in-code',
-                method: 'double-click',
-              })
-
               window.dispatchEvent(
                 new CustomEvent('synctex:sync-to-position', {
-                  detail: clickPosition,
+                  detail: {
+                    position: clickPosition,
+                    selectText: window.getSelection()?.toString(),
+                  },
                 })
               )
             }
@@ -486,6 +484,21 @@ function PdfJsViewer({ url, pdfFile }: PdfJsViewerProps) {
   // Don't render the toolbar until we have the necessary information
   const toolbarInfoLoaded =
     rawScale !== null && page !== null && totalPages !== null
+
+  // Remove the 'region' role from each PDF page container.
+  // This prevents polluting the landmark navigation menu for every page,
+  // which creates a poor screen reader experience. Page navigation should be handled
+  // by the toolbar controls.
+  useEffect(() => {
+    if (!initialised || !pdfJsWrapper) return
+
+    const pageElements = pdfJsWrapper.container.querySelectorAll(
+      'div[data-page-number][role="region"]'
+    )
+    pageElements.forEach(element => {
+      element.removeAttribute('role')
+    })
+  }, [initialised, pdfJsWrapper])
 
   /* eslint-disable jsx-a11y/no-noninteractive-tabindex */
   /* eslint-disable jsx-a11y/no-noninteractive-element-interactions */

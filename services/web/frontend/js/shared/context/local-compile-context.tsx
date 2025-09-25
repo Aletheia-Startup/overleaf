@@ -44,7 +44,12 @@ import {
   PdfScrollPosition,
   usePdfScrollPosition,
 } from '@/shared/hooks/use-pdf-scroll-position'
-import { LogEntry, PdfFileDataList } from '@/features/pdf-preview/util/types'
+import {
+  DeliveryLatencies,
+  HighlightData,
+  LogEntry,
+  PdfFileDataList,
+} from '@/features/pdf-preview/util/types'
 import { isSplitTestEnabled } from '@/utils/splitTestUtils'
 import { captureException } from '@/infrastructure/error-reporter'
 import OError from '@overleaf/o-error'
@@ -65,7 +70,7 @@ export type CompileContext = {
   fileList?: PdfFileDataList
   hasChanges: boolean
   hasShortCompileTimeout: boolean
-  highlights?: Record<string, any>[]
+  highlights?: HighlightData[]
   isProjectOwner: boolean
   logEntries?: {
     all: LogEntry[]
@@ -136,7 +141,7 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
 
   const { pdfPreviewOpen } = useLayoutContext()
 
-  const { features, alphaProgram, labsProgram } = useUserContext()
+  const { features, alphaProgram } = useUserContext()
 
   const { fileTreeData } = useFileTreeData()
   const { findEntityByPath } = useFileTreePathContext()
@@ -186,7 +191,9 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
   const [firstRenderDone, setFirstRenderDone] = useState(() => () => {})
 
   // latencies of compile/pdf download/rendering
-  const [deliveryLatencies, setDeliveryLatencies] = useState({})
+  const [deliveryLatencies, setDeliveryLatencies] = useState<DeliveryLatencies>(
+    {}
+  )
 
   // whether the project has been compiled yet
   const [compiledOnce, setCompiledOnce] = useState(false)
@@ -458,7 +465,7 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
   // these are refs rather than state so they don't trigger the effect to run
   const previousRuleCountsRef = useRef<{
     ruleCounts: Record<string, number>
-    rootDocId: string
+    rootDocId: string | null | undefined
   } | null>(null)
   const recordedActionsRef = useRef<Record<string, boolean>>({})
   const recordAction = useCallback((action: string) => {
@@ -525,7 +532,7 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
                 )
               }
 
-              if (hasCompileLogsEvents || labsProgram) {
+              if (hasCompileLogsEvents) {
                 const ruleCounts = buildRuleCounts(
                   result.logEntries.all
                 ) as Record<string, number>
@@ -622,7 +629,6 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
     joinedOnce,
     data,
     alphaProgram,
-    labsProgram,
     features,
     hasCompileLogsEvents,
     hasPremiumCompile,

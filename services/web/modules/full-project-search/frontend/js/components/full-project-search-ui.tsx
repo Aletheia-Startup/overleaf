@@ -19,8 +19,8 @@ import { SearchQuery } from '@codemirror/search'
 import { debugConsole } from '@/utils/debugging'
 import useEventListener from '@/shared/hooks/use-event-listener'
 import { Col, Form, Row } from 'react-bootstrap'
-import OLFormControl from '@/features/ui/components/ol/ol-form-control'
-import Button from '@/features/ui/components/bootstrap-5/button'
+import OLFormControl from '@/shared/components/ol/ol-form-control'
+import Button from '@/shared/components/button/button'
 import Notification from '@/shared/components/notification'
 import '../../stylesheets/full-project-search.scss'
 import { userStyles } from '@/shared/utils/styles'
@@ -36,7 +36,7 @@ import { useFileTreePathContext } from '@/features/file-tree/contexts/file-tree-
 import { FullProjectSearchResults } from './full-project-search-results'
 import { signalWithTimeout } from '@/utils/abort-signal'
 import { useIsNewEditorEnabled } from '@/features/ide-redesign/utils/new-editor-utils'
-import RailPanelHeader from '@/features/ide-redesign/components/rail-panel-header'
+import RailPanelHeader from '@/features/ide-redesign/components/rail/rail-panel-header'
 import { useActiveOverallTheme } from '@/shared/hooks/use-active-overall-theme'
 
 const FullProjectSearchUI: FC = () => {
@@ -111,7 +111,11 @@ const FullProjectSearchUI: FC = () => {
 
         await projectSnapshot.refresh()
         if (!abortControllerRef.current.signal.aborted) {
-          const results = await searchSnapshot(projectSnapshot, searchQuery)
+          const results = await searchSnapshot(
+            projectSnapshot,
+            searchQuery,
+            newEditor
+          )
           setMatchedFiles(results)
         }
       } catch (error) {
@@ -121,7 +125,7 @@ const FullProjectSearchUI: FC = () => {
         setLoading(false)
       }
     },
-    [openDocs, projectSnapshot, t]
+    [openDocs, projectSnapshot, t, newEditor]
   )
 
   const searchInputRef = useRef<HTMLInputElement>(null)

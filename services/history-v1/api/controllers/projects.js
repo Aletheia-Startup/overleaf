@@ -13,6 +13,7 @@ const logger = require('@overleaf/logger')
 const { Chunk, ChunkResponse, Blob } = require('overleaf-editor-core')
 const {
   BlobStore,
+  BatchBlobStore,
   blobHash,
   chunkStore,
   redisBuffer,
@@ -25,6 +26,9 @@ const render = require('./render')
 const expressify = require('./expressify')
 const withTmpDir = require('./with_tmp_dir')
 const StreamSizeLimit = require('./stream_size_limit')
+const { getProjectBlobsBatch } = require('../../storage/lib/blob_store')
+const assert = require('../../storage/lib/assert')
+const { getChunkMetadataForVersion } = require('../../storage/lib/chunk_store')
 
 const pipeline = promisify(Stream.pipeline)
 
@@ -154,11 +158,12 @@ async function getChanges(req, res, next) {
     })
   }
 
-  let chunk
   try {
-    chunk = await chunkStore.loadAtVersion(projectId, since, {
-      preferNewer: true,
-    })
+    const { changes, hasMore } = await chunkStore.getChangesSinceVersion(
+      projectId,
+      since
+    )
+    res.json({ changes: changes.map(change => change.toRaw()), hasMore })
   } catch (err) {
     if (err instanceof Chunk.VersionNotFoundError) {
       return res.status(400).json({
@@ -167,14 +172,6 @@ async function getChanges(req, res, next) {
     }
     throw err
   }
-
-  const latestChunkMetadata = await chunkStore.getLatestChunkMetadata(projectId)
-
-  // Extract the relevant changes from the chunk that contains the start version
-  const changes = chunk.getChanges().slice(since - chunk.getStartVersion())
-  const hasMore = latestChunkMetadata.endVersion > chunk.getEndVersion()
-
-  res.json({ changes: changes.map(change => change.toRaw()), hasMore })
 }
 
 async function getZip(req, res, next) {
@@ -288,21 +285,22 @@ async function headProjectBlob(req, res) {
 }
 
 // Support simple, singular ranges starting from zero only, up-to 2MB = 2_000_000, 7 digits
-const RANGE_HEADER = /^bytes=0-(\d{1,7})$/
+const RANGE_HEADER = /^bytes=(\d{1,7})-(\d{1,7})$/
 
 /**
  * @param {string} header
- * @return {{}|{start: number, end: number}}
+ * @return {undefined | {start: number, end: number}}
  * @private
  */
 function _getRangeOpts(header) {
-  if (!header) return {}
+  if (!header) return undefined
   const match = header.match(RANGE_HEADER)
   if (match) {
-    const end = parseInt(match[1], 10)
-    return { start: 0, end }
+    const start = parseInt(match[1], 10)
+    const end = parseInt(match[2], 10)
+    return { start, end }
   }
-  return {}
+  return undefined
 }
 
 async function getProjectBlob(req, res, next) {
@@ -315,6 +313,31 @@ async function getProjectBlob(req, res, next) {
   try {
     let stream
     try {
+      if (opts) {
+        // This is a range request, so we need to set the appropriate headers
+        // Browser caching only works if the total size is known, so we have
+        // to fetch the blob metadata first.
+        const metaData = await blobStore.getBlob(hash)
+        if (metaData) {
+          const blobLength = metaData.getByteLength()
+          if (opts.start > opts.end || opts.start >= blobLength) {
+            return res
+              .status(416) // Requested Range Not Satisfiable
+              .set('Content-Range', `bytes */${blobLength}`)
+              .set('Content-Length', '0')
+              .end()
+          }
+          // Valid range request
+          const actualEnd = Math.min(opts.end, blobLength - 1)
+          const returnedSize = actualEnd - opts.start + 1
+          res.set('Content-Length', returnedSize)
+          res.set(
+            'Content-Range',
+            `bytes ${opts.start}-${actualEnd}/${blobLength}`
+          )
+          res.status(206)
+        }
+      }
       stream = await blobStore.getStream(hash, opts)
     } catch (err) {
       if (err instanceof Blob.NotFoundError) {
@@ -374,8 +397,87 @@ async function getSnapshotAtVersion(projectId, version) {
     chunk.getChanges(),
     chunk.getEndVersion() - version
   )
-  snapshot.applyAll(changes)
+
+  if (changes.length > 0) {
+    snapshot.applyAll(changes)
+  } else {
+    // There are no changes in this chunk; we need to look at the previous chunk
+    // to get the snapshot's timestamp
+    let chunkMetadata
+    try {
+      chunkMetadata = await getChunkMetadataForVersion(projectId, version)
+    } catch (err) {
+      if (err instanceof Chunk.VersionNotFoundError) {
+        // The snapshot is the first snapshot of the first chunk, so we can't
+        // find a timestamp. This shouldn't happen often. Ignore the error and
+        // leave the timestamp empty.
+      } else {
+        throw err
+      }
+    }
+
+    snapshot.setTimestamp(chunkMetadata.endTimestamp)
+  }
+
   return snapshot
+}
+
+function sumUpByteLength(blobs) {
+  return blobs.reduce((sum, blob) => sum + blob.getByteLength(), 0)
+}
+
+async function getBlobStats(req, res) {
+  const projectId = req.swagger.params.project_id.value
+  const blobHashes = req.swagger.params.body.value.blobHashes || []
+  for (const hash of blobHashes) {
+    assert.blobHash(hash, 'bad hash')
+  }
+  const blobStore = new BlobStore(projectId)
+  const batchBlobStore = new BatchBlobStore(blobStore)
+  await batchBlobStore.preload(Array.from(blobHashes))
+  const blobs = Array.from(batchBlobStore.blobs.values()).filter(Boolean)
+  const textBlobs = blobs.filter(b => b.getStringLength() !== null)
+  const binaryBlobs = blobs.filter(b => b.getStringLength() === null)
+  const textBlobBytes = sumUpByteLength(textBlobs)
+  const binaryBlobBytes = sumUpByteLength(binaryBlobs)
+  res.json({
+    projectId,
+    textBlobBytes,
+    binaryBlobBytes,
+    totalBytes: textBlobBytes + binaryBlobBytes,
+    nTextBlobs: textBlobs.length,
+    nBinaryBlobs: binaryBlobs.length,
+  })
+}
+
+async function getProjectBlobsStats(req, res) {
+  const projectIds = req.swagger.params.body.value.projectIds
+  const { blobs } = await getProjectBlobsBatch(
+    projectIds.map(id => {
+      if (assert.POSTGRES_ID_REGEXP.test(id)) {
+        return parseInt(id, 10)
+      } else {
+        return id
+      }
+    })
+  )
+  const sizes = []
+  for (const projectId of projectIds) {
+    const projectBlobs = blobs.get(projectId) || []
+    const textBlobs = projectBlobs.filter(b => b.getStringLength() !== null)
+    const binaryBlobs = projectBlobs.filter(b => b.getStringLength() === null)
+    const textBlobBytes = sumUpByteLength(textBlobs)
+    const binaryBlobBytes = sumUpByteLength(binaryBlobs)
+    sizes.push({
+      projectId,
+      textBlobBytes,
+      binaryBlobBytes,
+      totalBytes: textBlobBytes + binaryBlobBytes,
+      nTextBlobs: textBlobs.length,
+      nBinaryBlobs: binaryBlobs.length,
+    })
+  }
+  res.json(sizes)
 }
 
 module.exports = {
@@ -396,4 +498,6 @@ module.exports = {
   getProjectBlob: expressify(getProjectBlob),
   headProjectBlob: expressify(headProjectBlob),
   copyProjectBlob: expressify(copyProjectBlob),
+  getBlobStats: expressify(getBlobStats),
+  getProjectBlobsStats: expressify(getProjectBlobsStats),
 }

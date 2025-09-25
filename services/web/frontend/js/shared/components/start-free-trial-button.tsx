@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { startFreeTrial } from '@/main/account-upgrade'
 import * as eventTracking from '../../infrastructure/event-tracking'
-import OLButton from '@/features/ui/components/ol/ol-button'
+import OLButton from '@/shared/components/ol/ol-button'
 
 type StartFreeTrialButtonProps = {
   source: string
@@ -11,6 +11,7 @@ type StartFreeTrialButtonProps = {
   children?: React.ReactNode
   handleClick?: React.ComponentProps<typeof OLButton>['onClick']
   segmentation?: eventTracking.Segmentation
+  extraSearchParams?: Record<string, string>
 }
 
 export default function StartFreeTrialButton({
@@ -22,6 +23,7 @@ export default function StartFreeTrialButton({
   source,
   variant,
   segmentation,
+  extraSearchParams,
 }: StartFreeTrialButtonProps) {
   const { t } = useTranslation()
 
@@ -44,9 +46,9 @@ export default function StartFreeTrialButton({
         handleClick(event)
       }
 
-      startFreeTrial(source, variant, segmentation)
+      startFreeTrial(source, variant, segmentation, extraSearchParams)
     },
-    [handleClick, source, variant, segmentation]
+    [handleClick, source, variant, segmentation, extraSearchParams]
   )
 
   return (

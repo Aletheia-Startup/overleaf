@@ -1,7 +1,8 @@
 DOCKER_COMPOSE_FLAGS ?= -f docker-compose.yml
 
 BUILD_NUMBER ?= local
-BRANCH_NAME ?= $(shell git rev-parse --abbrev-ref HEAD)
+export BRANCH_NAME ?= $(shell git rev-parse --abbrev-ref HEAD)
+export COMMIT_SHA ?= $(shell git rev-parse HEAD)
 PROJECT_NAME = web
 BUILD_DIR_NAME = $(shell pwd | xargs basename | tr -cd '[a-zA-Z0-9_.\-]')
 PWD = $(shell pwd)
@@ -30,24 +31,41 @@ $(MODULE_MAKEFILES): Makefile.module
 # Clean
 #
 
-clean:
-	-$(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=unit_test_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=unit_test_all_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=unit_test_parallel_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=unit_test_parallel_make_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=acceptance_test_saas_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=acceptance_test_server_ce_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=acceptance_test_server_pro_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=acceptance_modules_merged_saas_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=acceptance_modules_merged_saas_1_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=acceptance_modules_merged_saas_2_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=acceptance_modules_merged_saas_3_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=acceptance_modules_merged_saas_4_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=acceptance_modules_merged_server_ce_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=acceptance_modules_merged_server_pro_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=test_frontend_ct_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
-	-COMPOSE_PROJECT_NAME=tar_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down --rmi local
+SHARD_PROJECT_NAMES = \
+	unit_test_$(BUILD_DIR_NAME) \
+	unit_test_all_$(BUILD_DIR_NAME) \
+	unit_test_esm_$(BUILD_DIR_NAME) \
+	unit_test_esm_watch_$(BUILD_DIR_NAME) \
+	unit_test_mocha_$(BUILD_DIR_NAME) \
+	unit_test_parallel_$(BUILD_DIR_NAME) \
+	unit_test_parallel_make_$(BUILD_DIR_NAME) \
+	acceptance_test_saas_$(BUILD_DIR_NAME) \
+	acceptance_test_server_ce_$(BUILD_DIR_NAME) \
+	acceptance_test_server_pro_$(BUILD_DIR_NAME) \
+	acceptance_test_modules_merged_saas_$(BUILD_DIR_NAME) \
+	acceptance_test_modules_merged_saas_1_$(BUILD_DIR_NAME) \
+	acceptance_test_modules_merged_saas_2_$(BUILD_DIR_NAME) \
+	acceptance_test_modules_merged_saas_3_$(BUILD_DIR_NAME) \
+	acceptance_test_modules_merged_saas_4_$(BUILD_DIR_NAME) \
+	acceptance_test_modules_merged_server_ce_$(BUILD_DIR_NAME) \
+	acceptance_test_modules_merged_server_pro_$(BUILD_DIR_NAME) \
+	frontend_test_$(BUILD_DIR_NAME) \
+	test_frontend_ct_$(BUILD_DIR_NAME) \
+	test_frontend_ct_core_other_$(BUILD_DIR_NAME) \
+	test_frontend_ct_core_features_$(BUILD_DIR_NAME) \
+	test_frontend_ct_modules_$(BUILD_DIR_NAME) \
+	test_frontend_ct_editor_other_$(BUILD_DIR_NAME) \
+	test_frontend_ct_editor_visual_$(BUILD_DIR_NAME) \
+	tar_$(BUILD_DIR_NAME) \
+
+CLEAN_SHARDS=$(addprefix clean/,$(SHARD_PROJECT_NAMES))
+clean: $(CLEAN_SHARDS)
+	-docker rmi --force $(IMAGE_CI) $(IMAGE_CI)-dev $(IMAGE_CI)-pug $(IMAGE_CI)-webpack $(IMAGE_REPO_FINAL)
+	-docker compose down --remove-orphans --rmi local --timeout 0 --volumes
+	-git clean -dfX data/
+
+$(CLEAN_SHARDS): clean/%:
+	-COMPOSE_PROJECT_NAME=$* docker compose down --remove-orphans --rmi local --timeout 0 --volumes
 
 clean_ci:
 	$(DOCKER_COMPOSE) down -v -t 0
@@ -59,7 +77,7 @@ clean_ci:
 # Tests
 #
 
-test: test_unit test_acceptance test_frontend test_frontend_ct
+test: test_unit test_acceptance test_frontend test_frontend_ct test_writefull
 
 test_module: test_unit_module test_acceptance_module
 
@@ -69,34 +87,28 @@ test_module: test_unit_module test_acceptance_module
 
 test_unit: test_unit_all
 test_unit_all: export COMPOSE_PROJECT_NAME=unit_test_all_$(BUILD_DIR_NAME)
-test_unit_all:
+test_unit_all: mongo_migrations_for_tests
 	$(DOCKER_COMPOSE) run --rm test_unit npm run test:unit:all
-	$(DOCKER_COMPOSE) down -v -t 0
 
 test_unit_all_silent: export COMPOSE_PROJECT_NAME=unit_test_all_$(BUILD_DIR_NAME)
-test_unit_all_silent:
+test_unit_all_silent: mongo_migrations_for_tests
 	$(DOCKER_COMPOSE) run --rm test_unit npm run test:unit:all:silent
-	$(DOCKER_COMPOSE) down -v -t 0
 
 test_unit_app: export COMPOSE_PROJECT_NAME=unit_test_$(BUILD_DIR_NAME)
-test_unit_app:
+test_unit_app: mongo_migrations_for_tests
 	$(DOCKER_COMPOSE) run --name unit_test_$(BUILD_DIR_NAME) --rm test_unit
-	$(DOCKER_COMPOSE) down -v -t 0
 
 test_unit_mocha: export COMPOSE_PROJECT_NAME=unit_test_mocha_$(BUILD_DIR_NAME)
-test_unit_mocha:
+test_unit_mocha: mongo_migrations_for_tests
 	$(DOCKER_COMPOSE) run --rm test_unit npm run test:unit:mocha
-	$(DOCKER_COMPOSE) down -v -t 0
 
 test_unit_esm: export COMPOSE_PROJECT_NAME=unit_test_esm_$(BUILD_DIR_NAME)
-test_unit_esm:
+test_unit_esm: mongo_migrations_for_tests
 	$(DOCKER_COMPOSE) run --rm test_unit npm run test:unit:esm
-	$(DOCKER_COMPOSE) down -v -t 0
 
 test_unit_esm_watch: export COMPOSE_PROJECT_NAME=unit_test_esm_watch_$(BUILD_DIR_NAME)
-test_unit_esm_watch:
+test_unit_esm_watch: mongo_migrations_for_tests
 	$(DOCKER_COMPOSE) run --rm test_unit npm run test:unit:esm:watch
-	$(DOCKER_COMPOSE) down -v -t 0
 
 TEST_SUITES = $(sort $(filter-out \
 	$(wildcard test/unit/src/helpers/*), \
@@ -118,18 +130,19 @@ J ?= 1
 test_unit_app_parallel_gnu_make: $(TEST_SUITES)
 test_unit_app_parallel_gnu_make_docker: export COMPOSE_PROJECT_NAME = \
 	unit_test_parallel_make_$(BUILD_DIR_NAME)
-test_unit_app_parallel_gnu_make_docker:
+test_unit_app_parallel_gnu_make_docker: mongo_migrations_for_tests
 	$(DOCKER_COMPOSE) run --rm test_unit \
 		make test_unit_app_parallel_gnu_make --output-sync -j $(J)
-	$(DOCKER_COMPOSE) down -v -t 0
 
 TEST_UNIT_MODULES = $(MODULE_DIRS:=/test_unit)
 $(TEST_UNIT_MODULES): %/test_unit: %/Makefile
-test_unit_modules: $(TEST_UNIT_MODULES)
+test_unit_modules: mongo_migrations_for_tests $(TEST_UNIT_MODULES)
 
-test_unit_module:
+test_unit_module: mongo_migrations_for_tests
 	$(MAKE) modules/$(MODULE_NAME)/test_unit
 
+mongo_migrations_for_tests:
+	$(DOCKER_COMPOSE) run --rm test_unit npm run migrations -- migrate -t saas || { $(DOCKER_COMPOSE) logs mongo; exit 42; }
 
 #
 # Frontend tests
@@ -151,6 +164,14 @@ TEST_FRONTEND_CT_VARIANTS = \
 	test_frontend_ct_modules \
 	test_frontend_ct_editor_other \
 	test_frontend_ct_editor_visual \
+
+#
+# Writefull tests
+#
+
+test_writefull:
+	COMPOSE_PROJECT_NAME=writefull_test_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) run --rm test_writefull
+	COMPOSE_PROJECT_NAME=writefull_test_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down -v -t 0
 
 # Note: The below cypress targets are for CI only
 build_test_frontend_ct:
@@ -201,7 +222,7 @@ test_acceptance_app_server_pro: export COMPOSE_PROJECT_NAME=acceptance_test_serv
 test_acceptance_app_server_pro: export OVERLEAF_CONFIG=$(CFG_SERVER_PRO)
 
 $(TEST_ACCEPTANCE_APP):
-	$(DOCKER_COMPOSE) run --rm test_acceptance
+	$(DOCKER_COMPOSE) run --rm test_acceptance || { $(DOCKER_COMPOSE) logs mongo; exit 42; }
 	$(DOCKER_COMPOSE) down -v -t 0
 
 # We are using _make magic_ for turning these file-targets into calls to
@@ -348,7 +369,7 @@ TEST_ACCEPTANCE_MODULES_MERGED_VARIANTS = \
 	test_acceptance_modules_merged_server_pro \
 
 $(TEST_ACCEPTANCE_MODULES_MERGED_VARIANTS):
-	$(DOCKER_COMPOSE) run --rm test_acceptance make test_acceptance_modules_merged_inner
+	$(DOCKER_COMPOSE) run --rm test_acceptance make test_acceptance_modules_merged_inner || { $(DOCKER_COMPOSE) logs mongo; exit 42; }
 	$(DOCKER_COMPOSE) down -v -t 0
 
 # outer loop for running saas tests in parallel
@@ -369,7 +390,7 @@ test_acceptance_modules_merged_saas_4: export COMPOSE_PROJECT_NAME = \
 $(TEST_ACCEPTANCE_MODULES_MERGED_SPLIT_SAAS): export BASE_CONFIG = $(CFG_SAAS)
 
 $(TEST_ACCEPTANCE_MODULES_MERGED_SPLIT_SAAS): test_acceptance_modules_merged_saas_%:
-	$(DOCKER_COMPOSE) run --rm test_acceptance make test_acceptance_modules_merged_inner_$*
+	$(DOCKER_COMPOSE) run --rm test_acceptance make test_acceptance_modules_merged_inner_$* || { $(DOCKER_COMPOSE) logs mongo; exit 42; }
 	$(DOCKER_COMPOSE) down -v -t 0
 
 test_acceptance_modules: $(TEST_ACCEPTANCE_MODULES_MERGED_VARIANTS)
@@ -459,6 +480,10 @@ format: format_pug
 format_pug:
 	npm run --silent format:pug
 
+format: format_jenkins
+format_jenkins:
+	npm run --silent format:jenkins
+
 format_fix:
 	npm run --silent format:fix
 
@@ -467,6 +492,9 @@ format_styles_fix:
 
 format_pug_fix:
 	npm run --silent format:pug:fix
+
+format_jenkins_fix:
+	npm run --silent format:jenkins:fix
 
 format_in_docker:
 	$(RUN_LINT_FORMAT) make format -j2 --output-sync
@@ -557,19 +585,38 @@ build:
 publish:
 	docker push $(IMAGE_REPO_FINAL)
 
+SENTRY_IMAGE=getsentry/sentry-cli:2.16.1
+sentry_prefetch:
+	docker pull $(SENTRY_IMAGE)
+
+sentry_upload: MONOREPO=$(shell cd ../../ && pwd)
+sentry_upload:
+	docker run --rm \
+		--volume $(MONOREPO):$(MONOREPO) --workdir $(PWD) \
+		--user "$(shell id -u):$(shell id -g)" \
+		--env BRANCH_NAME --env SENTRY_RELEASE \
+		--entrypoint bin/sentry_upload \
+		$(SENTRY_IMAGE)
+
 tar:
 	COMPOSE_PROJECT_NAME=tar_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) run --rm tar
 	COMPOSE_PROJECT_NAME=tar_$(BUILD_DIR_NAME) $(DOCKER_COMPOSE) down -v -t 0
 
 build_storybook:
 	npm run lezer-latex:generate
-	npm run build-storybook
-	if [ -n "$(BRANCH_NAME)" ]; then \
-	  echo "Renaming storybook-static -> $(BRANCH_NAME)."; \
-	  d=$$(dirname "$(BRANCH_NAME)"); \
-	  mkdir -p "storybook-output/$$d"; \
-	  mv storybook-static "storybook-output/$$d/$$(basename "$(BRANCH_NAME)")/"; \
-	fi
+	mkdir -p data/storybook/
+	npm run build-storybook -- --output-dir data/storybook/$(BRANCH_NAME)
+
+storybook_index:
+	mkdir -p data/storybook/
+	m4 \
+		-DLIST="$(shell gsutil ls "${BUCKET}/" \
+										| sed -E "s@^${BUCKET}/([^/]+)/@\1@" \
+										| grep -v -e index.html \
+										| sort \
+										| tr '\n' ,)" \
+		-DBRANCH_NAME="${BRANCH_NAME}" .storybook/index.html.m4 \
+	> data/storybook/index.html
 
 MODULE_TARGETS = \
 	$(TEST_ACCEPTANCE_MODULES_SAAS) \
@@ -585,7 +632,7 @@ $(MODULE_TARGETS):
 .PHONY:
 	$(MODULE_TARGETS) \
 	compile_modules compile_modules_full clean_ci \
-	test test_module test_unit test_unit_app \
+	test test_module mongo_migrations_for_tests test_unit test_unit_app \
 	test_unit_modules test_unit_module test_frontend \
 	test_acceptance test_acceptance_app test_acceptance_modules \
 	test_acceptance_module ci format format_fix lint \

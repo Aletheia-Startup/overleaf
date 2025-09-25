@@ -2,7 +2,7 @@ import { Panel, PanelGroup } from 'react-resizable-panels'
 import classNames from 'classnames'
 import { HorizontalResizeHandle } from '@/features/ide-react/components/resize/horizontal-resize-handle'
 import PdfPreview from '@/features/pdf-preview/components/pdf-preview'
-import { RailLayout } from './rail'
+import { RailLayout } from './rail/rail'
 import { Toolbar } from './toolbar/toolbar'
 import { HorizontalToggler } from '@/features/ide-react/components/resize/horizontal-toggler'
 import { useTranslation } from 'react-i18next'
@@ -68,6 +68,8 @@ export default function MainLayout() {
                 })}
                 minSize={5}
                 defaultSize={50}
+                tagName="section"
+                aria-label={t('editor')}
               >
                 <div className="ide-redesign-editor-container">
                   <EditorPanel />
@@ -108,6 +110,8 @@ export default function MainLayout() {
                 ref={pdfPanelRef}
                 onExpand={handlePdfPaneExpand}
                 onCollapse={handlePdfPaneCollapse}
+                tagName="section"
+                aria-label={t('pdf_preview')}
               >
                 <PdfPreview />
                 {pdfLayout === 'flat' && view === 'pdf' && (

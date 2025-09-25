@@ -51,14 +51,20 @@ describe('AuthorizationManager', function () {
       },
     }
 
-    this.DocumentUpdaterHandler = {
+    this.ChatApiHandler = {
       promises: {
-        getComment: sinon
+        getThread: sinon
           .stub()
-          .resolves({ metadata: { user_id: new ObjectId() } }),
+          .resolves({ messages: [{ user_id: new ObjectId() }] }),
       },
     }
-
+    this.Modules = { promises: { hooks: { fire: sinon.stub() } } }
+    this.settings = {
+      passwordStrengthOptions: {},
+      adminPrivilegeAvailable: true,
+      adminRolesEnabled: false,
+      moduleImportSequence: [],
+    }
     this.AuthorizationManager = SandboxedModule.require(modulePath, {
       requires: {
         'mongodb-legacy': { ObjectId },
@@ -67,12 +73,9 @@ describe('AuthorizationManager', function () {
         '../Project/ProjectGetter': this.ProjectGetter,
         '../../models/User': { User: this.User },
         '../TokenAccess/TokenAccessHandler': this.TokenAccessHandler,
-        '../DocumentUpdater/DocumentUpdaterHandler':
-          this.DocumentUpdaterHandler,
-        '@overleaf/settings': {
-          passwordStrengthOptions: {},
-          adminPrivilegeAvailable: true,
-        },
+        '../Chat/ChatApiHandler': this.ChatApiHandler,
+        '../../infrastructure/Modules': this.Modules,
+        '@overleaf/settings': this.settings,
       },
     })
   })
@@ -445,6 +448,28 @@ describe('AuthorizationManager', function () {
           expect(this.result).to.equal('readAndWrite')
         })
       })
+
+      describe('with link-sharing disabled', function () {
+        beforeEach(async function () {
+          this.settings.disableLinkSharing = true
+          this.result =
+            await this.AuthorizationManager.promises.getPrivilegeLevelForProject(
+              null,
+              this.project._id,
+              this.token
+            )
+        })
+
+        it('should not call CollaboratorsGetter.getProjectAccess', function () {
+          this.CollaboratorsGetter.promises.getProjectAccess.called.should.equal(
+            false
+          )
+        })
+
+        it('should return false', function () {
+          expect(this.result).to.equal(false)
+        })
+      })
     })
 
     describe("when the project doesn't exist", function () {
@@ -592,7 +617,6 @@ describe('AuthorizationManager', function () {
         await this.AuthorizationManager.promises.canUserDeleteOrResolveThread(
           this.user._id,
           this.project._id,
-          this.doc._id,
           this.thread._id,
           this.token
         )
@@ -615,7 +639,6 @@ describe('AuthorizationManager', function () {
         await this.AuthorizationManager.promises.canUserDeleteOrResolveThread(
           this.user._id,
           this.project._id,
-          this.doc._id,
           this.thread._id,
           this.token
         )
@@ -641,7 +664,6 @@ describe('AuthorizationManager', function () {
           await this.AuthorizationManager.promises.canUserDeleteOrResolveThread(
             this.user._id,
             this.project._id,
-            this.doc._id,
             this.thread._id,
             this.token
           )
@@ -649,16 +671,15 @@ describe('AuthorizationManager', function () {
         expect(canResolve).to.equal(false)
       })
 
-      it('should return true when user is the comment author', async function () {
-        this.DocumentUpdaterHandler.promises.getComment
-          .withArgs(this.project._id, this.doc._id, this.thread._id)
-          .resolves({ metadata: { user_id: this.user._id } })
+      it('should return true when user is the thread author', async function () {
+        this.ChatApiHandler.promises.getThread
+          .withArgs(this.project._id, this.thread._id)
+          .resolves({ messages: [{ user_id: this.user._id }] })
 
         const canResolve =
           await this.AuthorizationManager.promises.canUserDeleteOrResolveThread(
             this.user._id,
             this.project._id,
-            this.doc._id,
             this.thread._id,
             this.token
           )
@@ -675,6 +696,43 @@ function testPermission(permission, privilegeLevels) {
       describe('when user is site admin', function () {
         beforeEach('set user as site admin', function () {
           this.user.isAdmin = true
+        })
+        expectPermission(permission, privilegeLevels.siteAdmin || false)
+      })
+      describe('admin without permissions', function () {
+        beforeEach(function () {
+          this.user.isAdmin = true
+          this.settings.adminRolesEnabled = true
+          this.Modules.promises.hooks.fire
+            .withArgs('getAdminCapabilities')
+            .resolves([])
+        })
+        expectPermission(permission, false)
+      })
+      describe('admin with `view-project-content`', function () {
+        beforeEach(function () {
+          this.user.isAdmin = true
+          this.settings.adminRolesEnabled = true
+          this.Modules.promises.hooks.fire
+            .withArgs('getAdminCapabilities')
+            .resolves([['view-project-content']])
+        })
+        expectPermission(permission, privilegeLevels.readOnly || false)
+      })
+      describe('admin with `modify-project`', function () {
+        beforeEach(function () {
+          this.user.isAdmin = true
+          this.settings.adminRolesEnabled = true
+          this.Modules.promises.hooks.fire
+            .withArgs('getAdminCapabilities')
+            .resolves([
+              [
+                'view-project-content',
+                'view-project-setting',
+                'modify-project-content',
+                'modify-project-setting',
+              ],
+            ])
         })
         expectPermission(permission, privilegeLevels.siteAdmin || false)
       })

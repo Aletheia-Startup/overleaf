@@ -2,16 +2,23 @@
 # Instead run bin/update_build_scripts from
 # https://github.com/overleaf/internal/
 
-version: "2.3"
-
 services:
   test_unit:
     image: ci/$PROJECT_NAME:$BRANCH_NAME-$BUILD_NUMBER
     user: node
+    volumes:
+      - ../../bin/shared/wait_for_it:/overleaf/bin/shared/wait_for_it
+      - ../../tsconfig.backend.json:/overleaf/tsconfig.backend.json
+    entrypoint: /overleaf/bin/shared/wait_for_it mongo:27017 --timeout=60 --
     command: npm run test:unit:_run
     environment:
+      MONGO_CONNECTION_STRING: mongodb://mongo/test-overleaf
       NODE_ENV: test
       NODE_OPTIONS: "--unhandled-rejections=strict"
+      VITEST_NO_CACHE: true
+    depends_on:
+      mongo:
+        condition: service_started
 
 
   test_acceptance:
@@ -26,11 +33,12 @@ services:
       NODE_OPTIONS: "--unhandled-rejections=strict"
     volumes:
       - ../../bin/shared/wait_for_it:/overleaf/bin/shared/wait_for_it
+      - ../../tsconfig.backend.json:/overleaf/tsconfig.backend.json
     depends_on:
       mongo:
         condition: service_started
     user: node
-    entrypoint: /overleaf/bin/shared/wait_for_it mongo:27017 --timeout=0 --
+    entrypoint: /overleaf/bin/shared/wait_for_it mongo:27017 --timeout=60 --
     command: npm run test:acceptance
 
 
@@ -46,6 +54,8 @@ services:
     command: --replSet overleaf
     volumes:
       - ../../bin/shared/mongodb-init-replica-set.js:/docker-entrypoint-initdb.d/mongodb-init-replica-set.js
+      - ../../bin/shared/mongodb-docker-entrypoint-wait.sh:/mongodb-docker-entrypoint-wait.sh
+    entrypoint: /mongodb-docker-entrypoint-wait.sh
     environment:
       MONGO_INITDB_DATABASE: sharelatex
     extra_hosts:

@@ -11,15 +11,9 @@ const OError = require('@overleaf/o-error')
 const UserGetter = require('../User/UserGetter')
 const ProjectGetter = require('../Project/ProjectGetter')
 const HistoryBackupDeletionHandler = require('./HistoryBackupDeletionHandler')
-const { db, ObjectId, waitForDb } = require('../../infrastructure/mongodb')
+const { db, waitForDb } = require('../../infrastructure/mongodb')
 const Metrics = require('@overleaf/metrics')
-const logger = require('@overleaf/logger')
 const { NotFoundError } = require('../Errors/Errors')
-const projectKey = require('./project_key')
-
-// BEGIN copy from services/history-v1/storage/lib/blob_store/index.js
-
-const GLOBAL_BLOBS = new Set() // CHANGE FROM SOURCE: only store hashes.
 
 const HISTORY_V1_URL = settings.apis.v1_history.url
 const HISTORY_V1_BASIC_AUTH = {
@@ -27,27 +21,9 @@ const HISTORY_V1_BASIC_AUTH = {
   password: settings.apis.v1_history.pass,
 }
 
-function makeGlobalKey(hash) {
-  return `${hash.slice(0, 2)}/${hash.slice(2, 4)}/${hash.slice(4)}`
-}
+// BEGIN copy from services/history-v1/storage/lib/blob_store/index.js
 
-function makeProjectKey(projectId, hash) {
-  return `${projectKey.format(projectId)}/${hash.slice(0, 2)}/${hash.slice(2)}`
-}
-
-function getBlobLocation(projectId, hash) {
-  if (GLOBAL_BLOBS.has(hash)) {
-    return {
-      bucket: settings.apis.v1_history.buckets.globalBlobs,
-      key: makeGlobalKey(hash),
-    }
-  } else {
-    return {
-      bucket: settings.apis.v1_history.buckets.projectBlobs,
-      key: makeProjectKey(projectId, hash),
-    }
-  }
-}
+const GLOBAL_BLOBS = new Set() // CHANGE FROM SOURCE: only store hashes.
 
 async function loadGlobalBlobs() {
   await waitForDb() // CHANGE FROM SOURCE: wait for db before running query.
@@ -58,6 +34,14 @@ async function loadGlobalBlobs() {
 }
 
 // END copy from services/history-v1/storage/lib/blob_store/index.js
+
+function getFilestoreBlobURL(historyId, hash) {
+  if (GLOBAL_BLOBS.has(hash)) {
+    return `${settings.apis.filestore.url}/history/global/hash/${hash}`
+  } else {
+    return `${settings.apis.filestore.url}/history/project/${historyId}/hash/${hash}`
+  }
+}
 
 async function initializeProject(projectId) {
   const body = await fetchJson(`${settings.apis.project_history.url}/project`, {
@@ -184,22 +168,25 @@ async function copyBlob(sourceHistoryId, targetHistoryId, hash) {
   )
 }
 
-async function requestBlobWithFallback(
+async function requestBlobWithProjectId(
   projectId,
   hash,
-  fileId,
   method = 'GET',
   range = ''
 ) {
   const project = await ProjectGetter.promises.getProject(projectId, {
     'overleaf.history.id': true,
   })
+  return requestBlob(project.overleaf.history.id, hash, method, range)
+}
+
+async function requestBlob(historyId, hash, method = 'GET', range = '') {
   // Talk to history-v1 directly to avoid streaming via project-history.
-  let url = new URL(HISTORY_V1_URL)
-  url.pathname += `/projects/${project.overleaf.history.id}/blobs/${hash}`
+  const url = new URL(HISTORY_V1_URL)
+  url.pathname += `/projects/${historyId}/blobs/${hash}`
 
   const opts = { method, headers: { Range: range } }
-  let stream, response, source
+  let stream, response
   try {
     ;({ stream, response } = await fetchStreamWithResponse(url, {
       ...opts,
@@ -208,38 +195,19 @@ async function requestBlobWithFallback(
         password: settings.apis.v1_history.pass,
       },
     }))
-    source = 'history-v1'
   } catch (err) {
     if (err instanceof RequestFailedError && err.response.status === 404) {
-      if (ObjectId.isValid(fileId)) {
-        url = new URL(settings.apis.filestore.url)
-        url.pathname = `/project/${projectId}/file/${fileId}`
-        try {
-          ;({ stream, response } = await fetchStreamWithResponse(url, opts))
-        } catch (err) {
-          if (
-            err instanceof RequestFailedError &&
-            err.response.status === 404
-          ) {
-            throw new NotFoundError()
-          }
-          throw err
-        }
-        logger.warn({ projectId, hash, fileId }, 'missing history blob')
-        source = 'filestore'
-      } else {
-        throw new NotFoundError()
-      }
+      throw new NotFoundError()
     } else {
       throw err
     }
   }
-  Metrics.inc('request_blob', 1, { path: source })
+  Metrics.inc('request_blob', 1, { path: 'history-v1' })
   return {
     url,
     stream,
-    source,
-    contentLength: response.headers.get('Content-Length'),
+    contentLength: parseInt(response.headers.get('Content-Length'), 10),
+    contentRange: response.headers.get('Content-Range'),
   }
 }
 
@@ -313,8 +281,8 @@ async function getLatestHistory(projectId) {
  * Get history changes since a given version
  *
  * @param {string} projectId
- * @param {object} opts
- * @param {number} opts.since - The start version of changes to get
+ * @param {object} [opts]
+ * @param {number} [opts.since] - The start version of changes to get
  */
 async function getChanges(projectId, opts = {}) {
   const historyId = await getHistoryId(projectId)
@@ -338,6 +306,22 @@ async function getHistoryId(projectId) {
     throw new OError('project does not have a history id', { projectId })
   }
   return historyId
+}
+
+async function getBlobStats(historyId, blobHashes) {
+  return await fetchJson(`${HISTORY_V1_URL}/projects/${historyId}/blob-stats`, {
+    method: 'POST',
+    basicAuth: HISTORY_V1_BASIC_AUTH,
+    json: { blobHashes: blobHashes.map(id => id.toString()) },
+  })
+}
+
+async function getProjectBlobStats(historyIds) {
+  return await fetchJson(`${HISTORY_V1_URL}/projects/blob-stats`, {
+    method: 'POST',
+    basicAuth: HISTORY_V1_BASIC_AUTH,
+    json: { projectIds: historyIds.map(id => id.toString()) },
+  })
 }
 
 async function injectUserDetails(data) {
@@ -421,7 +405,7 @@ function _userView(user) {
 const loadGlobalBlobsPromise = loadGlobalBlobs()
 
 module.exports = {
-  getBlobLocation,
+  getFilestoreBlobURL,
   loadGlobalBlobsPromise,
   initializeProject: callbackify(initializeProject),
   flushProject: callbackify(flushProject),
@@ -432,7 +416,8 @@ module.exports = {
   getCurrentContent: callbackify(getCurrentContent),
   uploadBlobFromDisk: callbackify(uploadBlobFromDisk),
   copyBlob: callbackify(copyBlob),
-  requestBlobWithFallback: callbackify(requestBlobWithFallback),
+  requestBlob: callbackify(requestBlob),
+  requestBlobWithProjectId: callbackify(requestBlobWithProjectId),
   getLatestHistory: callbackify(getLatestHistory),
   getChanges: callbackify(getChanges),
   promises: {
@@ -446,8 +431,11 @@ module.exports = {
     getContentAtVersion,
     uploadBlobFromDisk,
     copyBlob,
-    requestBlobWithFallback,
+    requestBlob,
+    requestBlobWithProjectId,
     getLatestHistory,
     getChanges,
+    getProjectBlobStats,
+    getBlobStats,
   },
 }

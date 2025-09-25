@@ -509,8 +509,43 @@ describe('<UserNotifications />', function () {
       render(<Institution />)
       fetchMock.delete(`/notifications/${institution._id}`, 200)
 
-      screen.getByRole('alert')
-      screen.getByText(/has been linked to your/i)
+      const notificationEl = screen.getByRole('alert')
+      expect(notificationEl.textContent).to.match(
+        new RegExp(
+          `your Overleaf account on ${notificationsInstitution.email} ` +
+            `has been linked to your ${notificationsInstitution.institutionName} ` +
+            `institutional account.`,
+          'i'
+        )
+      )
+
+      const closeBtn = screen.getByRole('button', { name: /close/i })
+      fireEvent.click(closeBtn)
+
+      expect(fetchMock.callHistory.called()).to.be.true
+      expect(screen.queryByRole('alert')).to.be.null
+    })
+
+    it('shows sso linked to group with domain capture enabled', function () {
+      const institution: DeepPartial<InstitutionType> = {
+        _id: 1,
+        templateKey: 'notification_group_sso_linked',
+      }
+      window.metaAttributesCache.set('ol-notificationsInstitution', [
+        { ...notificationsInstitution, ...institution },
+      ])
+      render(<Institution />)
+      fetchMock.delete(`/notifications/${institution._id}`, 200)
+
+      const notificationEl = screen.getByRole('alert')
+      expect(notificationEl.textContent).to.match(
+        new RegExp(
+          `your Overleaf account on ${notificationsInstitution.email} ` +
+            `has been linked to your ${notificationsInstitution.institutionName} ` +
+            `account.`,
+          'i'
+        )
+      )
 
       const closeBtn = screen.getByRole('button', { name: /close/i })
       fireEvent.click(closeBtn)
@@ -1044,6 +1079,18 @@ describe('<UserNotifications />', function () {
       expect(
         screen.queryByText('Success! Single sign-on is all set up for you.')
       ).to.be.null
+    })
+
+    it('shows group SSO linked notification when joining via domain capture', function () {
+      const groupName = 'Group Name'
+      window.metaAttributesCache.set('ol-groupSsoSetupSuccess', true)
+      window.metaAttributesCache.set('ol-viaDomainCapture', true)
+      window.metaAttributesCache.set('ol-joinedGroupName', groupName)
+      renderWithinProjectListProvider(GroupSsoSetupSuccess)
+      const alert = screen.getByRole('alert')
+      expect(alert.textContent).to.contain(
+        `Success! You’ve joined the ${groupName} group subscription. Your group has SSO enabled so you can log in without needing to remember a password.`
+      )
     })
   })
 })

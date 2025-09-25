@@ -1,10 +1,11 @@
 import { useCallback } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
-import OLButton from '@/features/ui/components/ol/ol-button'
+import OLButton from '@/shared/components/ol/ol-button'
 import { useDetachCompileContext as useCompileContext } from '../../../shared/context/detach-compile-context'
 import { useStopOnFirstError } from '../../../shared/hooks/use-stop-on-first-error'
 import MaterialIcon from '@/shared/components/material-icon'
 import PdfLogEntry from '@/features/pdf-preview/components/pdf-log-entry'
+import { useIsNewErrorLogsPositionEnabled } from '@/features/ide-redesign/utils/new-editor-utils'
 
 function PreviewLogsPaneMaxEntries({
   totalEntries,
@@ -39,6 +40,7 @@ function PreviewLogsPaneMaxEntriesContent({
 }: {
   hasErrors?: boolean
 }) {
+  const newLogsPosition = useIsNewErrorLogsPositionEnabled()
   const { t } = useTranslation()
   const { startCompile, stoppedOnFirstError, setAnimateCompileDropdownArrow } =
     useCompileContext()
@@ -76,7 +78,11 @@ function PreviewLogsPaneMaxEntriesContent({
             ]}
           />{' '}
         </p>
-        <p>{t('log_entry_maximum_entries_see_full_logs')}</p>
+        <p>
+          {newLogsPosition
+            ? t('log_entry_maximum_entries_see_full_logs_new')
+            : t('log_entry_maximum_entries_see_full_logs')}
+        </p>
       </>
     )
   }
@@ -86,7 +92,9 @@ function PreviewLogsPaneMaxEntriesContent({
       <MaterialIcon type="lightbulb" className="align-middle" />
       &nbsp;
       <strong>{t('tip')}: </strong>
-      {t('log_entry_maximum_entries_see_full_logs')}
+      {newLogsPosition
+        ? t('log_entry_maximum_entries_see_full_logs_new')
+        : t('log_entry_maximum_entries_see_full_logs')}
     </p>
   )
 }

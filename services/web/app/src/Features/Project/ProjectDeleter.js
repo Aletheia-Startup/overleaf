@@ -7,6 +7,7 @@ const { DeletedProject } = require('../../models/DeletedProject')
 const { ProjectAuditLogEntry } = require('../../models/ProjectAuditLogEntry')
 const Errors = require('../Errors/Errors')
 const logger = require('@overleaf/logger')
+const Settings = require('@overleaf/settings')
 const DocumentUpdaterHandler = require('../DocumentUpdater/DocumentUpdaterHandler')
 const TagsHandler = require('../Tags/TagsHandler')
 const ProjectDetailsHandler = require('./ProjectDetailsHandler')
@@ -15,13 +16,10 @@ const CollaboratorsGetter = require('../Collaborators/CollaboratorsGetter')
 const DocstoreManager = require('../Docstore/DocstoreManager')
 const EditorRealTimeController = require('../Editor/EditorRealTimeController')
 const HistoryManager = require('../History/HistoryManager')
-const FilestoreHandler = require('../FileStore/FileStoreHandler')
 const ChatApiHandler = require('../Chat/ChatApiHandler')
-const moment = require('moment')
 const { promiseMapWithLimit } = require('@overleaf/promise-utils')
 const { READ_PREFERENCE_SECONDARY } = require('../../infrastructure/mongodb')
 
-const EXPIRE_PROJECTS_AFTER_DAYS = 90
 const PROJECT_EXPIRATION_BATCH_SIZE = 10000
 
 module.exports = {
@@ -92,7 +90,7 @@ async function expireDeletedProjectsAfterDuration() {
   const deletedProjects = await DeletedProject.find(
     {
       'deleterData.deletedAt': {
-        $lt: new Date(moment().subtract(EXPIRE_PROJECTS_AFTER_DAYS, 'days')),
+        $lt: new Date(Date.now() - Settings.projectHardDeletionDelay),
       },
       project: { $type: 'object' },
     },
@@ -106,7 +104,11 @@ async function expireDeletedProjectsAfterDuration() {
     )
   )
   logger.info(
-    { projectCount: projectIds.length },
+    {
+      projectCount: projectIds.length,
+      retentionPeriodInDays:
+        Settings.projectHardDeletionDelay / (1000 * 60 * 60 * 24),
+    },
     'expiring batch of deleted projects'
   )
   try {
@@ -347,7 +349,6 @@ async function expireDeletedProject(projectId) {
         deletedProject.project._id,
         historyId
       ),
-      FilestoreHandler.promises.deleteProject(deletedProject.project._id),
       ChatApiHandler.promises.destroyProject(deletedProject.project._id),
       ProjectAuditLogEntry.deleteMany({ projectId }),
       Modules.promises.hooks.fire('projectExpired', deletedProject.project._id),

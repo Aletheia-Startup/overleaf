@@ -4,9 +4,19 @@ import StartFreeTrialButton from '../../../shared/components/start-free-trial-bu
 import { memo, useCallback, useMemo } from 'react'
 import PdfLogEntry from './pdf-log-entry'
 import { useStopOnFirstError } from '../../../shared/hooks/use-stop-on-first-error'
-import OLButton from '@/features/ui/components/ol/ol-button'
+import OLButton from '@/shared/components/ol/ol-button'
 import * as eventTracking from '../../../infrastructure/event-tracking'
 import getMeta from '@/utils/meta'
+import {
+  populateEditorRedesignSegmentation,
+  useEditorAnalytics,
+} from '@/shared/hooks/use-editor-analytics'
+import {
+  isNewUser,
+  useIsNewEditorEnabled,
+  useIsNewErrorLogsPositionEnabled,
+} from '@/features/ide-redesign/utils/new-editor-utils'
+import { getSplitTestVariant } from '@/utils/splitTestUtils'
 
 function TimeoutUpgradePromptNew() {
   const {
@@ -15,6 +25,7 @@ function TimeoutUpgradePromptNew() {
     setAnimateCompileDropdownArrow,
     isProjectOwner,
   } = useDetachCompileContext()
+  const newEditor = useIsNewEditorEnabled()
 
   const { enableStopOnFirstError } = useStopOnFirstError({
     eventSource: 'timeout-new',
@@ -26,16 +37,19 @@ function TimeoutUpgradePromptNew() {
     setAnimateCompileDropdownArrow(true)
   }, [enableStopOnFirstError, startCompile, setAnimateCompileDropdownArrow])
 
-  const { reducedTimeoutWarning, compileTimeout } =
-    getMeta('ol-compileSettings')
+  const { compileTimeout } = getMeta('ol-compileSettings')
 
   const sharedSegmentation = useMemo(
-    () => ({
-      '10s-timeout-warning': reducedTimeoutWarning,
-      'is-owner': isProjectOwner,
-      compileTime: compileTimeout,
-    }),
-    [isProjectOwner, reducedTimeoutWarning, compileTimeout]
+    () =>
+      populateEditorRedesignSegmentation(
+        {
+          'is-owner': isProjectOwner,
+          compileTime: compileTimeout,
+          location: 'logs',
+        },
+        newEditor
+      ),
+    [isProjectOwner, compileTimeout, newEditor]
   )
 
   return (
@@ -65,9 +79,27 @@ const CompileTimeout = memo(function CompileTimeout({
   segmentation,
 }: CompileTimeoutProps) {
   const { t } = useTranslation()
+  const newLogsPosition = useIsNewErrorLogsPositionEnabled()
+
+  const extraSearchParams = useMemo(() => {
+    if (!isNewUser()) {
+      return undefined
+    }
+
+    const variant = getSplitTestVariant('editor-redesign-new-users')
+
+    if (!variant) {
+      return undefined
+    }
+
+    return {
+      itm_content: variant,
+    }
+  }, [])
 
   return (
     <PdfLogEntry
+      autoExpand={!newLogsPosition}
       headerTitle={t('your_compile_timed_out')}
       formattedContent={
         getMeta('ol-ExposedSettings').enableSubscriptions && (
@@ -100,6 +132,7 @@ const CompileTimeout = memo(function CompileTimeout({
                   source="compile-timeout"
                   buttonProps={{ variant: 'primary', className: 'w-100' }}
                   segmentation={segmentation}
+                  extraSearchParams={extraSearchParams}
                 >
                   {t('start_a_free_trial')}
                 </StartFreeTrialButton>
@@ -127,9 +160,11 @@ const PreventTimeoutHelpMessage = memo(function PreventTimeoutHelpMessage({
   segmentation,
 }: PreventTimeoutHelpMessageProps) {
   const { t } = useTranslation()
+  const { sendEvent } = useEditorAnalytics()
+  const newLogsPosition = useIsNewErrorLogsPositionEnabled()
 
   function sendInfoClickEvent() {
-    eventTracking.sendMB('paywall-info-click', {
+    sendEvent('paywall-info-click', {
       ...segmentation,
       'paywall-type': 'compile-timeout',
       content: 'blog',
@@ -149,24 +184,23 @@ const PreventTimeoutHelpMessage = memo(function PreventTimeoutHelpMessage({
 
   return (
     <PdfLogEntry
+      autoExpand={!newLogsPosition}
       headerTitle={t('reasons_for_compile_timeouts')}
       formattedContent={
         <>
-          {segmentation?.['10s-timeout-warning'] === 'enabled' && (
-            <p>
-              <em>
-                <Trans
-                  i18nKey="were_reducing_compile_timeout"
-                  components={[compileTimeoutChangesBlogLink]}
-                />
-              </em>
-            </p>
-          )}
+          <p>
+            <em>
+              <Trans
+                i18nKey="weve_reduced_compile_timeout"
+                components={[compileTimeoutChangesBlogLink]}
+              />
+            </em>
+          </p>
           <p>{t('common_causes_of_compile_timeouts_include')}:</p>
           <ul>
             <li>
               <Trans
-                i18nKey="large_or_high-resolution_images_taking_too_long"
+                i18nKey="project_timed_out_optimize_images"
                 components={[
                   // eslint-disable-next-line jsx-a11y/anchor-has-content, react/jsx-key
                   <a
@@ -212,7 +246,7 @@ const PreventTimeoutHelpMessage = memo(function PreventTimeoutHelpMessage({
           </ul>
           <p>
             <Trans
-              i18nKey="learn_more_about_other_causes_of_compile_timeouts"
+              i18nKey="project_timed_out_learn_more"
               components={[
                 // eslint-disable-next-line jsx-a11y/anchor-has-content, react/jsx-key
                 <a

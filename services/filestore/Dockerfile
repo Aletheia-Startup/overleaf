@@ -2,7 +2,7 @@
 # Instead run bin/update_build_scripts from
 # https://github.com/overleaf/internal/
 
-FROM node:22.17.0 AS base
+FROM node:22.18.0 AS base
 
 WORKDIR /overleaf/services/filestore
 COPY services/filestore/install_deps.sh /overleaf/services/filestore/
@@ -24,8 +24,8 @@ RUN cd /overleaf && npm ci --quiet
 COPY services/filestore/ /overleaf/services/filestore/
 
 FROM app
-RUN mkdir -p uploads user_files template_files \
-&&  chown node:node uploads user_files template_files
+RUN mkdir -p uploads template_files \
+&&  chown node:node uploads template_files
 USER node
 
 CMD ["node", "--expose-gc", "app.js"]

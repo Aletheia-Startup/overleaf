@@ -5,7 +5,7 @@ import { UserSettings } from '../../../types/user-settings'
 import { OAuthProviders } from '../../../types/oauth-providers'
 import { ExposedSettings } from '../../../types/exposed-settings'
 import {
-  type AllowedImageName,
+  type ImageName,
   OverallThemeMeta,
   type SpellCheckLanguage,
 } from '../../../types/project-settings'
@@ -30,6 +30,7 @@ import {
   GroupPolicy,
   ManagedGroupSubscription,
   MemberGroupSubscription,
+  StripePaymentProviderService,
 } from '../../../types/subscription/dashboard/subscription'
 import { SplitTestInfo } from '../../../types/split-test'
 import { ValidationStatus } from '../../../types/group-management/validation'
@@ -43,7 +44,10 @@ import {
 } from '../../../types/settings-page'
 import { SuggestedLanguage } from '../../../types/system-message'
 import type { TeamInvite } from '../../../types/team-invite'
-import { GroupPlans } from '../../../types/subscription/dashboard/group-plans'
+import {
+  GroupPlans,
+  GroupPlansData,
+} from '../../../types/subscription/dashboard/group-plans'
 import {
   GroupSSOLinkingStatus,
   SSOConfig,
@@ -53,12 +57,16 @@ import { Subscription as ProjectDashboardSubscription } from '../../../types/pro
 import { ThirdPartyIds } from '../../../types/third-party-ids'
 import { Publisher } from '../../../types/subscription/dashboard/publisher'
 import { SubscriptionChangePreview } from '../../../types/subscription/subscription-change-preview'
-import { DefaultNavbarMetadata } from '@/features/ui/components/types/default-navbar-metadata'
-import { FooterMetadata } from '@/features/ui/components/types/footer-metadata'
+import { SubscriptionCreationPreview } from '../../../types/subscription/subscription-creation-preview'
+import { DefaultNavbarMetadata } from '@/shared/components/types/default-navbar-metadata'
+import { FooterMetadata } from '@/shared/components/types/footer-metadata'
 import type { ScriptLogType } from '../../../modules/admin-panel/frontend/js/features/script-logs/script-log'
 import { ActiveExperiment } from './labs-utils'
 import { Subscription as AdminSubscription } from '../../../types/admin/subscription'
 import { AdminCapability } from '../../../types/admin-capabilities'
+import { GroupAuditLog } from '../../../modules/group-audit-log/frontend/js/components/logs'
+import { AlgoliaConfig } from '../../../modules/algolia-search/frontend/js/types'
+import { WritefullPublicEnv } from '@wf/domain/writefull-public-env'
 
 export interface Meta {
   'ol-ExposedSettings': ExposedSettings
@@ -69,12 +77,11 @@ export interface Meta {
   'ol-adminCapabilities': AdminCapability[]
   'ol-adminSubscription': AdminSubscription
   'ol-aiAssistViaWritefullSource': string
+  'ol-algolia': AlgoliaConfig | undefined
   'ol-allInReconfirmNotificationPeriods': UserEmailData[]
   'ol-allowedExperiments': string[]
-  'ol-allowedImageNames': AllowedImageName[]
   'ol-anonymous': boolean
   'ol-baseAssetPath': string
-  'ol-bootstrapVersion': 3 | 5
   'ol-brandVariation': Record<string, any>
 
   // dynamic keys based on permissions
@@ -89,9 +96,8 @@ export interface Meta {
   'ol-cannot-link-other-third-party-sso': boolean
   'ol-cannot-reactivate-subscription': boolean
   'ol-cannot-use-ai': boolean
-  'ol-capabilities': Array<'dropbox' | 'chat' | 'use-ai'>
+  'ol-capabilities': Array<'dropbox' | 'chat' | 'use-ai' | 'link-sharing'>
   'ol-compileSettings': {
-    reducedTimeoutWarning: string
     compileTimeout: number
   }
   'ol-compilesUserContentDomain': string
@@ -106,6 +112,8 @@ export interface Meta {
   'ol-debugPdfDetach': boolean
   'ol-detachRole': 'detached' | 'detacher' | ''
   'ol-dictionariesRoot': 'string'
+  'ol-domainCaptureEnabled': boolean | undefined
+  'ol-domainCaptureTestURL': string | undefined
   'ol-dropbox': { error: boolean; registered: boolean }
   'ol-editorThemes': string[]
   'ol-email': string
@@ -123,6 +131,7 @@ export interface Meta {
   'ol-groupId': string
   'ol-groupName': string
   'ol-groupPlans': GroupPlans
+  'ol-groupPlansData': GroupPlansData
   'ol-groupPolicy': GroupPolicy
   'ol-groupSSOActive': boolean
   'ol-groupSSOConfig'?: SSOConfig
@@ -137,12 +146,24 @@ export interface Meta {
   'ol-hasGroupSSOFeature': boolean
   'ol-hasIndividualPaidSubscription': boolean
   'ol-hasManagedUsersFeature': boolean
+  'ol-hasModifyGroupManagerAccess': boolean
   'ol-hasPassword': boolean
   'ol-hasSplitTestWriteAccess': boolean
   'ol-hasSubscription': boolean
   'ol-hasTrackChangesFeature': boolean
+  'ol-hasWriteAccess': boolean
   'ol-hideLinkingWidgets': boolean // CI only
+  'ol-historyBlobStats': {
+    projectId: string
+    textBlobsBytes: number
+    binaryBlobsBytes: number
+    totalBytes: number
+    nTextBlobs: number
+    nBinaryBlobs: number
+    owned?: boolean
+  }[]
   'ol-i18n': { currentLangCode: string }
+  'ol-imageNames': ImageName[]
   'ol-inactiveTutorials': string[]
   'ol-institutionEmailNonCanonical': string | undefined
   'ol-institutionLinked': InstitutionLink | undefined
@@ -159,6 +180,7 @@ export interface Meta {
   'ol-itm_campaign': string
   'ol-itm_content': string
   'ol-itm_referrer': string
+  'ol-joinedGroupName': string
   'ol-labs': boolean
   'ol-labsExperiments': ActiveExperiment[] | undefined
   'ol-languages': SpellCheckLanguage[]
@@ -166,6 +188,7 @@ export interface Meta {
   'ol-legacyEditorThemes': string[]
   'ol-licenseQuantity'?: number
   'ol-loadingText': string
+  'ol-logsForRendering': GroupAuditLog[]
   'ol-managedGroupSubscriptions': ManagedGroupSubscription[]
   'ol-managedInstitutions': ManagedInstitution[]
   'ol-managedPublishers': Publisher[]
@@ -184,6 +207,7 @@ export interface Meta {
   'ol-notificationsInstitution': InstitutionType[]
   'ol-oauthProviders': OAuthProviders
   'ol-odcData': OnboardingFormData
+  'ol-otMigrationStage': number
   'ol-overallThemes': OverallThemeMeta[]
   'ol-pages': number
   'ol-passwordStrengthOptions': PasswordStrengthOptions
@@ -201,7 +225,6 @@ export interface Meta {
   'ol-primaryEmail': { email: string; confirmed: boolean }
   'ol-project': any // TODO
   'ol-projectEntityCounts': { files: number; docs: number }
-  'ol-projectHistoryBlobsEnabled': boolean
   'ol-projectName': string
   'ol-projectOwnerHasPremiumOnPageLoad': boolean
   'ol-projectSyncSuccessMessage': string
@@ -231,7 +254,6 @@ export interface Meta {
   'ol-settingsPlans': Plan[]
   'ol-shouldAllowEditingDetails': boolean
   'ol-shouldLoadHotjar': boolean
-  'ol-showAiAssistNotification': boolean
   'ol-showAiErrorAssistant': boolean
   'ol-showBrlGeoBanner': boolean
   'ol-showCouponField': boolean
@@ -244,16 +266,28 @@ export interface Meta {
   'ol-showTemplatesServerPro': boolean
   'ol-showUSGovBanner': boolean
   'ol-showUpgradePrompt': boolean
-  'ol-skipUrl': string
   'ol-splitTestInfo': { [name: string]: SplitTestInfo }
   'ol-splitTestName': string
   'ol-splitTestVariants': { [name: string]: string }
   'ol-ssoDisabled': boolean
   'ol-ssoErrorMessage': string
+  'ol-ssoInitPath': string
   'ol-stripeAccountId': string
-  'ol-stripeCustomerId': string
+  'ol-stripePublicKeyUK': string
+  'ol-stripePublicKeyUS': string
+  'ol-stripeSubscriptionData': {
+    customerId: string
+    subscriptionState: string | null
+    paymentProviderService: StripePaymentProviderService | null
+  }
   'ol-subscription': any // TODO: mixed types, split into two fields
   'ol-subscriptionChangePreview': SubscriptionChangePreview
+  'ol-subscriptionCreationPreview': SubscriptionCreationPreview
+  'ol-subscriptionFeatures': {
+    managedUsers?: boolean
+    groupSSO?: boolean
+    domainCapture?: boolean
+  }
   'ol-subscriptionId': string
   'ol-suggestedLanguage': SuggestedLanguage | undefined
   'ol-survey': Survey | undefined
@@ -280,10 +314,10 @@ export interface Meta {
   'ol-usersEmail': string | undefined
   'ol-usersSubscription': { personal: boolean; group: boolean }
   'ol-validationStatus': ValidationStatus
+  'ol-viaDomainCapture': boolean
   'ol-wikiEnabled': boolean
-  'ol-writefullCssUrl': string
   'ol-writefullEnabled': boolean
-  'ol-writefullJsUrl': string
+  'ol-writefullEnv': WritefullPublicEnv
   'ol-wsUrl': string
 }
 

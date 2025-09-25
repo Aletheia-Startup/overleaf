@@ -403,6 +403,14 @@ describe('PaymentProviderEntities', function () {
         })
       })
 
+      describe('getRequestForAddOnReactivation()', function () {
+        it('throws an AddOnNotPresentError', function () {
+          expect(() =>
+            this.subscription.getRequestForAddOnReactivation(this.addOn.code)
+          ).to.throw(Errors.AddOnNotPresentError)
+        })
+      })
+
       describe('getRequestForGroupPlanUpgrade()', function () {
         it('returns a correct change request', function () {
           const changeRequest =
@@ -454,58 +462,168 @@ describe('PaymentProviderEntities', function () {
         })
       })
 
-      describe('without add-ons', function () {
+      describe('with an add-on pending cancellation', function () {
         beforeEach(function () {
-          const { PaymentProviderSubscription } = this.PaymentProviderEntities
-          this.subscription = new PaymentProviderSubscription({
-            id: 'subscription-id',
-            userId: 'user-id',
-            planCode: 'regular-plan',
-            planName: 'My Plan',
-            planPrice: 10,
-            subtotal: 10.99,
-            taxRate: 0.2,
-            taxAmount: 2.4,
-            total: 14.4,
-            currency: 'USD',
-          })
+          this.subscription.pendingChange =
+            new PaymentProviderSubscriptionChange({
+              subscription: this.subscription,
+              nextPlanCode: this.subscription.planCode,
+              nextPlanName: this.subscription.planName,
+              nextPlanPrice: this.subscription.planPrice,
+              nextAddOns: [],
+            })
         })
 
-        describe('hasAddOn()', function () {
-          it('returns false for any add-on', function () {
-            expect(this.subscription.hasAddOn('some-add-on')).to.be.false
-          })
-        })
-
-        describe('getRequestForAddOnPurchase()', function () {
+        describe('getRequestForAddOnReactivation()', function () {
           it('returns a change request', function () {
-            const {
-              PaymentProviderSubscriptionChangeRequest,
-              PaymentProviderSubscriptionAddOnUpdate,
-            } = this.PaymentProviderEntities
             const changeRequest =
-              this.subscription.getRequestForAddOnPurchase('some-add-on')
+              this.subscription.getRequestForAddOnReactivation(this.addOn.code)
             expect(changeRequest).to.deep.equal(
               new PaymentProviderSubscriptionChangeRequest({
                 subscription: this.subscription,
-                timeframe: 'now',
-                addOnUpdates: [
-                  new PaymentProviderSubscriptionAddOnUpdate({
-                    code: 'some-add-on',
-                    quantity: 1,
-                  }),
-                ],
+                timeframe: 'term_end',
+                addOnUpdates: [this.addOn.toAddOnUpdate()],
               })
             )
           })
-        })
 
-        describe('getRequestForAddOnRemoval()', function () {
-          it('throws an AddOnNotPresentError', function () {
+          it('throws an AddOnNotPresentError if given the wrong add-on', function () {
             expect(() =>
-              this.subscription.getRequestForAddOnRemoval('some-add-on')
+              this.subscription.getRequestForAddOnReactivation('some-add-on')
             ).to.throw(Errors.AddOnNotPresentError)
           })
+        })
+
+        describe('getRequestForPlanRevert()', function () {
+          beforeEach(function () {
+            const { PaymentProviderSubscription } = this.PaymentProviderEntities
+            this.subscription = new PaymentProviderSubscription({
+              id: 'subscription-id',
+              userId: 'user-id',
+              planCode: 'regular-plan',
+              planName: 'My Plan',
+              planPrice: 10,
+              addOns: [
+                {
+                  addOnCode: 'addon-1',
+                  quantity: 2,
+                  unitAmountInCents: 500,
+                },
+                {
+                  addOnCode: 'addon-2',
+                  quantity: 1,
+                  unitAmountInCents: 600,
+                },
+              ],
+              subtotal: 10.99,
+              taxRate: 0.2,
+              taxAmount: 2.4,
+              total: 14.4,
+              currency: 'USD',
+            })
+          })
+
+          it('throws if the plan to revert to doesnt exist', function () {
+            const invalidPlanCode = 'non-existent-plan'
+            expect(() =>
+              this.subscription.getRequestForPlanRevert(invalidPlanCode, null)
+            ).to.throw('Unable to find plan in settings')
+          })
+
+          it('creates a change request with the restore point', function () {
+            const previousPlanCode = 'cheap-plan'
+            const previousAddOns = [
+              { addOnCode: 'addon-1', quantity: 1, unitAmountInCents: 500 },
+            ]
+            const changeRequest = this.subscription.getRequestForPlanRevert(
+              previousPlanCode,
+              previousAddOns
+            )
+            expect(changeRequest).to.be.an.instanceOf(
+              this.PaymentProviderEntities
+                .PaymentProviderSubscriptionChangeRequest
+            )
+            expect(changeRequest.planCode).to.equal(previousPlanCode)
+            expect(changeRequest.addOnUpdates).to.deep.equal([
+              {
+                code: 'addon-1',
+                quantity: 1,
+                unitPrice: 5,
+              },
+            ])
+          })
+
+          it('defaults to addons to an empty array to clear the addon state', function () {
+            const previousPlanCode = 'cheap-plan'
+            const changeRequest = this.subscription.getRequestForPlanRevert(
+              previousPlanCode,
+              null
+            )
+            expect(changeRequest.addOnUpdates).to.deep.equal([])
+          })
+        })
+      })
+    })
+
+    describe('without add-ons', function () {
+      beforeEach(function () {
+        const { PaymentProviderSubscription } = this.PaymentProviderEntities
+        this.subscription = new PaymentProviderSubscription({
+          id: 'subscription-id',
+          userId: 'user-id',
+          planCode: 'regular-plan',
+          planName: 'My Plan',
+          planPrice: 10,
+          subtotal: 10.99,
+          taxRate: 0.2,
+          taxAmount: 2.4,
+          total: 14.4,
+          currency: 'USD',
+        })
+      })
+
+      describe('hasAddOn()', function () {
+        it('returns false for any add-on', function () {
+          expect(this.subscription.hasAddOn('some-add-on')).to.be.false
+        })
+      })
+
+      describe('getRequestForAddOnPurchase()', function () {
+        it('returns a change request', function () {
+          const {
+            PaymentProviderSubscriptionChangeRequest,
+            PaymentProviderSubscriptionAddOnUpdate,
+          } = this.PaymentProviderEntities
+          const changeRequest =
+            this.subscription.getRequestForAddOnPurchase('some-add-on')
+          expect(changeRequest).to.deep.equal(
+            new PaymentProviderSubscriptionChangeRequest({
+              subscription: this.subscription,
+              timeframe: 'now',
+              addOnUpdates: [
+                new PaymentProviderSubscriptionAddOnUpdate({
+                  code: 'some-add-on',
+                  quantity: 1,
+                }),
+              ],
+            })
+          )
+        })
+      })
+
+      describe('getRequestForAddOnRemoval()', function () {
+        it('throws an AddOnNotPresentError', function () {
+          expect(() =>
+            this.subscription.getRequestForAddOnRemoval('some-add-on')
+          ).to.throw(Errors.AddOnNotPresentError)
+        })
+      })
+
+      describe('getRequestForAddOnReactivation()', function () {
+        it('throws an AddOnNotPresentError', function () {
+          expect(() =>
+            this.subscription.getRequestForAddOnReactivation('some-add-on')
+          ).to.throw(Errors.AddOnNotPresentError)
         })
       })
     })

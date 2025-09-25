@@ -2,11 +2,13 @@ import { login } from './login'
 import { openEmail } from './email'
 import { v4 as uuid } from 'uuid'
 
+export const NEW_PROJECT_BUTTON_MATCHER = /new project/i
+
 export function createProject(
   name: string,
   {
     type = 'Blank project',
-    newProjectButtonMatcher = /new project/i,
+    newProjectButtonMatcher = NEW_PROJECT_BUTTON_MATCHER,
     open = true,
   }: {
     type?: 'Blank project' | 'Example project'
@@ -41,7 +43,7 @@ export function createProject(
   cy.findAllByText(type, { exact: false }).first().click()
   cy.findByRole('dialog').within(() => {
     cy.get('input').type(name)
-    cy.findByText('Create').click()
+    cy.findByRole('button', { name: 'Create' }).click()
   })
   if (open) {
     cy.url().should('match', /\/project\/[a-fA-F0-9]{24}/)
@@ -104,19 +106,21 @@ function shareProjectByEmail(
   level: 'Viewer' | 'Editor'
 ) {
   openProjectByName(projectName)
-  cy.findByText('Share').click()
+  cy.findByRole('button', { name: 'Share' }).click()
   cy.findByRole('dialog').within(() => {
-    cy.findByLabelText('Add people', { selector: 'input' }).type(`${email},`)
-    cy.findByLabelText('Add people', { selector: 'input' })
+    cy.findByLabelText('Add email address', { selector: 'input' }).type(
+      `${email},`
+    )
+    cy.findByLabelText('Add email address', { selector: 'input' })
       .parents('form')
       .within(() => {
         cy.findByTestId('add-collaborator-select')
           .click()
           .then(() => {
-            cy.findByText(level).click()
+            cy.findByRole('option', { name: level }).click()
           })
       })
-    cy.findByText('Invite').click({ force: true })
+    cy.findByRole('button', { name: 'Invite' }).click()
     cy.findByText('Invite not yet accepted.')
   })
 }
@@ -130,6 +134,17 @@ export function shareProjectByEmailAndAcceptInviteViaDash(
 
   login(email)
   openProjectViaInviteNotification(projectName)
+}
+
+export function getSpamSafeProjectName() {
+  while (true) {
+    // Move from hex/16 to base64/64 possible characters per char in string
+    const name = Buffer.from(uuid().replaceAll('-', ''), 'hex')
+      .toString('base64')
+      .slice(0, 10)
+    const nDigits = (name.match(/\d/g) || []).length
+    if (nDigits < 6) return name
+  }
 }
 
 export function shareProjectByEmailAndAcceptInviteViaEmail(
@@ -190,7 +205,9 @@ export function waitForMainDocToLoad() {
 
 export function openFile(fileName: string, waitFor: string) {
   // force: The file-tree pane is too narrow to display the full name.
-  cy.findByTestId('file-tree').findByText(fileName).click({ force: true })
+  cy.findByRole('navigation', { name: 'Project files and outline' })
+    .findByRole('treeitem', { name: fileName })
+    .click({ force: true })
 
   // wait until we've switched to the selected file
   cy.findByText('Loading…').should('not.exist')
@@ -208,7 +225,9 @@ export function createNewFile() {
     cy.findByText('Create').click()
   })
   // force: The file-tree pane is too narrow to display the full name.
-  cy.findByTestId('file-tree').findByText(fileName).click({ force: true })
+  cy.findByTestId('file-tree')
+    .findByRole('treeitem', { name: fileName })
+    .click({ force: true })
 
   // wait until we've switched to the newly created empty file
   cy.findByText('Loading…').should('not.exist')

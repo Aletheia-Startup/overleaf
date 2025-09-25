@@ -47,12 +47,13 @@ import {
 } from '@/shared/context/types/project-metadata'
 import { UserId } from '../../../types/user'
 import { ProjectCompiler } from '../../../types/project-settings'
+import { ReferencesContext } from '@/features/ide-react/context/references-context'
 
 // these constants can be imported in tests instead of
 // using magic strings
 export const PROJECT_ID = 'project123'
 export const PROJECT_NAME = 'project-name'
-export const USER_ID = '123abd'
+export const USER_ID = '123abd' as UserId
 export const USER_EMAIL = 'testuser@example.com'
 
 const defaultUserSettings = {
@@ -91,7 +92,7 @@ export type EditorProvidersProps = {
   providers?: Record<string, React.FC<React.PropsWithChildren<any>>>
 }
 
-export const projectDefaults = {
+export const projectDefaults: ProjectMetadata = {
   _id: PROJECT_ID,
   name: PROJECT_NAME,
   owner: {
@@ -125,6 +126,8 @@ export const projectDefaults = {
   compiler: 'pdflatex' as ProjectCompiler,
   members: [],
   invites: [],
+  trackChangesState: {} as Record<UserId | '__guests__', boolean>,
+  spellCheckLanguage: 'en',
 }
 
 /**
@@ -180,7 +183,11 @@ export function EditorProviders({
     merge({}, defaultUserSettings, userSettings)
   )
 
-  window.metaAttributesCache.set('ol-capabilities', ['chat', 'dropbox'])
+  window.metaAttributesCache.set('ol-capabilities', [
+    'chat',
+    'dropbox',
+    'link-sharing',
+  ])
 
   const scope = merge(
     {
@@ -237,12 +244,34 @@ export function EditorProviders({
         }),
         LayoutProvider: makeLayoutProvider(layoutContext),
         ProjectProvider: makeProjectProvider(project),
+        ReferencesProvider: makeReferencesProvider(),
         ...providers,
       }}
     >
       {children}
     </ReactContextRoot>
   )
+}
+
+const makeReferencesProvider = () => {
+  const ReferencesProvider: FC<PropsWithChildren> = ({ children }) => {
+    return (
+      <ReferencesContext.Provider
+        value={{
+          referenceKeys: new Set(),
+          indexAllReferences: () => Promise.resolve(),
+          searchLocalReferences() {
+            return Promise.resolve({
+              hits: [],
+            })
+          },
+        }}
+      >
+        {children}
+      </ReferencesContext.Provider>
+    )
+  }
+  return ReferencesProvider
 }
 
 const makeConnectionProvider = (socket: Socket) => {

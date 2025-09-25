@@ -9,13 +9,12 @@ export function isExcludedBySharding(
     | 'LOCAL_ONLY'
     | 'CE_DEFAULT'
     | 'CE_CUSTOM_1'
-    | 'CE_CUSTOM_2'
-    | 'CE_CUSTOM_3'
     | 'PRO_DEFAULT_1'
     | 'PRO_DEFAULT_2'
     | 'PRO_CUSTOM_1'
     | 'PRO_CUSTOM_2'
     | 'PRO_CUSTOM_3'
+    | 'PRO_CUSTOM_4'
 ) {
   const SHARD = Cypress.env('SHARD')
   return SHARD && shard !== SHARD
@@ -54,6 +53,7 @@ export function startWith({
     cy.log(`starting with ${cfg}`)
 
     this.timeout(STARTUP_TIMEOUT)
+    previousConfigFrontend = ''
     const { previousConfigServer } = await reconfigure({
       pro,
       version,
@@ -67,6 +67,47 @@ export function startWith({
     }
     previousConfigFrontend = cfg
   })
+}
+
+// Allow reloading the server in other places, e.g. beforeEach hooks.
+export async function reloadWith({
+  pro = false,
+  version = 'latest',
+  vars = {},
+  varsFn = () => ({}),
+  withDataDir = false,
+  resetData = false,
+  mongoVersion = '',
+}) {
+  Object.assign(vars, varsFn())
+  const cfg = JSON.stringify({
+    pro,
+    version,
+    vars,
+    withDataDir,
+    resetData,
+    mongoVersion,
+  })
+  if (resetData) {
+    resetCreatedUsersCache()
+    resetActivateUserRateLimit()
+    // no return here, always reconfigure when resetting data
+  } else if (previousConfigFrontend === cfg) {
+    return
+  }
+  previousConfigFrontend = ''
+  const { previousConfigServer } = await reconfigure({
+    pro,
+    version,
+    vars,
+    withDataDir,
+    resetData,
+    mongoVersion,
+  })
+  if (previousConfigServer !== cfg) {
+    await Cypress.session.clearAllSavedSessions()
+  }
+  previousConfigFrontend = cfg
 }
 
 export { reconfigure }

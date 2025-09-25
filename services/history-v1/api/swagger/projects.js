@@ -37,6 +37,94 @@ exports.paths = {
       ],
     },
   },
+  '/projects/blob-stats': {
+    post: {
+      'x-swagger-router-controller': 'projects',
+      operationId: 'getProjectBlobsStats',
+      tags: ['Project'],
+      description: 'Get Blob stats for projects.',
+      consumes: ['application/json'],
+      parameters: [
+        {
+          name: 'body',
+          in: 'body',
+          schema: {
+            type: 'object',
+            properties: {
+              projectIds: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+            },
+          },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Initialized',
+          schema: {
+            type: 'array',
+            items: {
+              $ref: '#/definitions/ProjectBlobStats',
+            },
+          },
+        },
+      },
+      security: [
+        {
+          basic: [],
+        },
+      ],
+    },
+  },
+  '/projects/{project_id}/blob-stats': {
+    post: {
+      'x-swagger-router-controller': 'projects',
+      operationId: 'getBlobStats',
+      tags: ['Project'],
+      description: 'Get specific blob stats for a project.',
+      consumes: ['application/json'],
+      parameters: [
+        {
+          name: 'project_id',
+          in: 'path',
+          description: 'project id',
+          required: true,
+          type: 'string',
+        },
+        {
+          name: 'body',
+          in: 'body',
+          required: true,
+          schema: {
+            type: 'object',
+            properties: {
+              blobHashes: {
+                type: 'array',
+                items: {
+                  type: 'string',
+                },
+              },
+            },
+            required: ['blobHashes'],
+          },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Success',
+          schema: {
+            $ref: '#/definitions/ProjectBlobStats',
+          },
+        },
+      },
+      security: [
+        {
+          basic: [],
+        },
+      ],
+    },
+  },
   '/projects/{project_id}': {
     delete: {
       'x-swagger-router-controller': 'projects',
@@ -97,6 +185,12 @@ exports.paths = {
       produces: ['application/octet-stream'],
       responses: {
         200: {
+          description: 'Success',
+          schema: {
+            type: 'file',
+          },
+        },
+        206: {
           description: 'Success',
           schema: {
             type: 'file',

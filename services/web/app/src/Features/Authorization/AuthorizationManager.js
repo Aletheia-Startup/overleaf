@@ -1,5 +1,6 @@
 const { callbackify } = require('util')
 const { ObjectId } = require('mongodb-legacy')
+const Features = require('../../infrastructure/Features')
 const CollaboratorsGetter = require('../Collaborators/CollaboratorsGetter')
 const CollaboratorsHandler = require('../Collaborators/CollaboratorsHandler')
 const ProjectGetter = require('../Project/ProjectGetter')
@@ -8,9 +9,12 @@ const PrivilegeLevels = require('./PrivilegeLevels')
 const TokenAccessHandler = require('../TokenAccess/TokenAccessHandler')
 const PublicAccessLevels = require('./PublicAccessLevels')
 const Errors = require('../Errors/Errors')
-const { hasAdminAccess } = require('../Helpers/AdminAuthorizationHelper')
+const {
+  hasAdminAccess,
+  getAdminCapabilities,
+} = require('../Helpers/AdminAuthorizationHelper')
 const Settings = require('@overleaf/settings')
-const DocumentUpdaterHandler = require('../DocumentUpdater/DocumentUpdaterHandler')
+const ChatApiHandler = require('../Chat/ChatApiHandler')
 
 function isRestrictedUser(
   userId,
@@ -146,9 +150,17 @@ async function getPrivilegeLevelForProjectWithUser(
   projectAccess,
   opts = {}
 ) {
-  if (!opts.ignoreSiteAdmin) {
-    if (await isUserSiteAdmin(userId)) {
+  let adminReadOnly = false
+  if (!opts.ignoreSiteAdmin && (await isUserSiteAdmin(userId))) {
+    if (!Settings.adminRolesEnabled) {
       return PrivilegeLevels.OWNER
+    }
+    const { adminCapabilities } = await getAdminCapabilities({ _id: userId })
+    if (adminCapabilities.includes('modify-project-content')) {
+      return PrivilegeLevels.OWNER
+    }
+    if (adminCapabilities.includes('view-project-content')) {
+      adminReadOnly = true
     }
   }
 
@@ -172,6 +184,10 @@ async function getPrivilegeLevelForProjectWithUser(
     if (publicAccessLevel === PublicAccessLevels.READ_AND_WRITE) {
       return PrivilegeLevels.READ_AND_WRITE
     }
+  }
+
+  if (adminReadOnly) {
+    return PrivilegeLevels.READ_ONLY
   }
 
   return PrivilegeLevels.NONE
@@ -198,6 +214,10 @@ async function _getPrivilegeLevelForProjectWithoutUserWithPublicAccessLevel(
   publicAccessLevel,
   opts = {}
 ) {
+  if (!Features.hasFeature('link-sharing')) {
+    // Link sharing disabled globally.
+    return PrivilegeLevels.NONE
+  }
   if (!opts.ignorePublicAccess) {
     if (publicAccessLevel === PublicAccessLevels.READ_ONLY) {
       // Legacy public read-only access for anonymous user
@@ -241,24 +261,31 @@ async function canUserReadProject(userId, projectId, token) {
   const privilegeLevel = await getPrivilegeLevelForProject(
     userId,
     projectId,
-    token
+    token,
+    { ignoreSiteAdmin: true }
   )
-  return [
-    PrivilegeLevels.OWNER,
-    PrivilegeLevels.READ_AND_WRITE,
-    PrivilegeLevels.READ_ONLY,
-    PrivilegeLevels.REVIEW,
-  ].includes(privilegeLevel)
+  return (
+    [
+      PrivilegeLevels.OWNER,
+      PrivilegeLevels.READ_AND_WRITE,
+      PrivilegeLevels.READ_ONLY,
+      PrivilegeLevels.REVIEW,
+    ].includes(privilegeLevel) ||
+    (await hasAdminProjectCapability(userId, 'view-project-content'))
+  )
 }
 
 async function canUserWriteProjectContent(userId, projectId, token) {
   const privilegeLevel = await getPrivilegeLevelForProject(
     userId,
     projectId,
-    token
+    token,
+    { ignoreSiteAdmin: true }
   )
-  return [PrivilegeLevels.OWNER, PrivilegeLevels.READ_AND_WRITE].includes(
-    privilegeLevel
+  return (
+    [PrivilegeLevels.OWNER, PrivilegeLevels.READ_AND_WRITE].includes(
+      privilegeLevel
+    ) || (await hasAdminProjectCapability(userId, 'modify-project-content'))
   )
 }
 
@@ -266,12 +293,14 @@ async function canUserWriteOrReviewProjectContent(userId, projectId, token) {
   const privilegeLevel = await getPrivilegeLevelForProject(
     userId,
     projectId,
-    token
+    token,
+    { ignoreSiteAdmin: true }
   )
   return (
     privilegeLevel === PrivilegeLevels.OWNER ||
     privilegeLevel === PrivilegeLevels.READ_AND_WRITE ||
-    privilegeLevel === PrivilegeLevels.REVIEW
+    privilegeLevel === PrivilegeLevels.REVIEW ||
+    (await hasAdminProjectCapability(userId, 'modify-project-content'))
   )
 }
 
@@ -280,10 +309,12 @@ async function canUserWriteProjectSettings(userId, projectId, token) {
     userId,
     projectId,
     token,
-    { ignorePublicAccess: true }
+    { ignorePublicAccess: true, ignoreSiteAdmin: true }
   )
-  return [PrivilegeLevels.OWNER, PrivilegeLevels.READ_AND_WRITE].includes(
-    privilegeLevel
+  return (
+    [PrivilegeLevels.OWNER, PrivilegeLevels.READ_AND_WRITE].includes(
+      privilegeLevel
+    ) || (await hasAdminProjectCapability(userId, 'modify-project-setting'))
   )
 }
 
@@ -291,18 +322,26 @@ async function canUserRenameProject(userId, projectId, token) {
   const privilegeLevel = await getPrivilegeLevelForProject(
     userId,
     projectId,
-    token
+    token,
+    { ignoreSiteAdmin: true }
   )
-  return privilegeLevel === PrivilegeLevels.OWNER
+  return (
+    privilegeLevel === PrivilegeLevels.OWNER ||
+    (await hasAdminProjectCapability(userId, 'modify-project-setting'))
+  )
 }
 
 async function canUserAdminProject(userId, projectId, token) {
   const privilegeLevel = await getPrivilegeLevelForProject(
     userId,
     projectId,
-    token
+    token,
+    { ignoreSiteAdmin: true }
   )
-  return privilegeLevel === PrivilegeLevels.OWNER
+  return (
+    privilegeLevel === PrivilegeLevels.OWNER ||
+    (await hasAdminProjectCapability(userId, 'modify-project-setting'))
+  )
 }
 
 async function isUserSiteAdmin(userId) {
@@ -314,10 +353,24 @@ async function isUserSiteAdmin(userId) {
   return hasAdminAccess(user)
 }
 
+/**
+ * @param {string} userId
+ * @param {'view-project-setting'|'view-project-content'|'modify-project-setting'|'modify-project-content'} adminCapability
+ */
+async function hasAdminProjectCapability(userId, adminCapability) {
+  if (!Settings.adminPrivilegeAvailable || !(await isUserSiteAdmin(userId))) {
+    return false
+  }
+  if (!Settings.adminRolesEnabled) {
+    return true
+  }
+  const { adminCapabilities } = await getAdminCapabilities({ _id: userId })
+  return adminCapabilities.includes(adminCapability)
+}
+
 async function canUserDeleteOrResolveThread(
   userId,
   projectId,
-  docId,
   threadId,
   token
 ) {
@@ -338,12 +391,14 @@ async function canUserDeleteOrResolveThread(
     return false
   }
 
-  const comment = await DocumentUpdaterHandler.promises.getComment(
-    projectId,
-    docId,
-    threadId
-  )
-  return comment.metadata.user_id === userId
+  try {
+    const thread = await ChatApiHandler.promises.getThread(projectId, threadId)
+    // Check if the user created the thread (first message)
+    return thread.messages.length > 0 && thread.messages[0].user_id === userId
+  } catch (error) {
+    // If thread doesn't exist or other error, deny access
+    return false
+  }
 }
 
 module.exports = {

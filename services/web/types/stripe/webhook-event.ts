@@ -7,6 +7,7 @@ export type CustomerSubscriptionUpdatedWebhookEvent = {
       metadata: {
         adminUserId?: string
       }
+      customer: string
     }
     // https://docs.stripe.com/api/events/object?api-version=2025-04-30.basil#event_object-data-previous_attributes
     previous_attributes: {
@@ -35,6 +36,7 @@ export type CustomerSubscriptionCreatedWebhookEvent = {
       metadata: {
         adminUserId?: string
       }
+      customer: string
     }
   }
 }
@@ -46,6 +48,7 @@ export type CustomerSubscriptionsDeletedWebhookEvent = {
       metadata: {
         adminUserId?: string
       }
+      customer: string
     }
   }
 }
@@ -53,7 +56,15 @@ export type CustomerSubscriptionsDeletedWebhookEvent = {
 export type InvoicePaidWebhookEvent = {
   type: 'invoice.paid'
   data: {
-    object: Stripe.Invoice
+    object: Stripe.Invoice & {
+      parent: Stripe.Invoice.Parent & {
+        subscription_details: Stripe.Invoice.Parent.SubscriptionDetails & {
+          metadata: {
+            adminUserId?: string
+          }
+        }
+      }
+    }
   }
   request: Stripe.Event.Request
 }
@@ -66,6 +77,41 @@ export type PaymentIntentPaymentFailedWebhookEvent = {
   request: Stripe.Event.Request
 }
 
+export type InvoiceVoidedWebhookEvent = {
+  type: 'invoice.voided'
+  data: {
+    object: Stripe.Invoice
+  }
+  request: Stripe.Event.Request
+}
+
+export type InvoiceOverdueWebhookEvent = {
+  type: 'invoice.overdue'
+  data: {
+    object: Stripe.Invoice
+  }
+  request: Stripe.Event.Request
+}
+
+export type CheckoutSessionCompletedWebhookEvent = {
+  type: 'checkout.session.completed'
+  data: {
+    object: Stripe.Checkout.Session & {
+      metadata: {
+        userId?: string
+      }
+    }
+  }
+  request: Stripe.Event.Request
+}
+
+export type CustomerCreatedWebhookEvent = {
+  type: 'customer.created'
+  data: {
+    object: Stripe.Customer
+  }
+}
+
 export type CustomerSubscriptionWebhookEvent =
   | CustomerSubscriptionUpdatedWebhookEvent
   | CustomerSubscriptionCreatedWebhookEvent
@@ -74,4 +120,8 @@ export type CustomerSubscriptionWebhookEvent =
 export type WebhookEvent =
   | CustomerSubscriptionWebhookEvent
   | InvoicePaidWebhookEvent
+  | InvoiceVoidedWebhookEvent
   | PaymentIntentPaymentFailedWebhookEvent
+  | InvoiceOverdueWebhookEvent
+  | CheckoutSessionCompletedWebhookEvent
+  | CustomerCreatedWebhookEvent

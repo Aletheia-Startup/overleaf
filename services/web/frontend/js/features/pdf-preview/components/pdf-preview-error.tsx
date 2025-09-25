@@ -1,6 +1,6 @@
 import { useTranslation, Trans } from 'react-i18next'
 import { memo, useCallback } from 'react'
-import OLButton from '@/features/ui/components/ol/ol-button'
+import OLButton from '@/shared/components/ol/ol-button'
 import PdfLogEntry from './pdf-log-entry'
 import { useDetachCompileContext as useCompileContext } from '../../../shared/context/detach-compile-context'
 import { useStopOnFirstError } from '../../../shared/hooks/use-stop-on-first-error'
@@ -253,10 +253,12 @@ function PdfPreviewError({
 export default memo(PdfPreviewError)
 
 function ErrorLogEntry({
+  autoExpand,
   title,
   headerIcon,
   children,
 }: {
+  autoExpand?: boolean
   title: string
   headerIcon?: React.ReactElement
   children: React.ReactNode
@@ -265,6 +267,7 @@ function ErrorLogEntry({
 
   return (
     <PdfLogEntry
+      autoExpand={autoExpand}
       headerTitle={title}
       headerIcon={headerIcon}
       formattedContent={children}
@@ -289,7 +292,7 @@ function TimedOutLogEntry() {
   }, [enableStopOnFirstError, startCompile, setAnimateCompileDropdownArrow])
 
   return (
-    <ErrorLogEntry title={t('timedout')}>
+    <ErrorLogEntry autoExpand title={t('timedout')}>
       <p>{t('project_timed_out_intro')}</p>
       <ul>
         <li>

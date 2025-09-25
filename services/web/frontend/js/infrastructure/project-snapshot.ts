@@ -1,5 +1,5 @@
 import pLimit from 'p-limit'
-import { Change, Chunk, Snapshot } from 'overleaf-editor-core'
+import { Change, Chunk, Snapshot, File } from 'overleaf-editor-core'
 import { RawChange, RawChunk } from 'overleaf-editor-core/lib/types'
 import { FetchError, getJSON, postJSON } from '@/infrastructure/fetch-json'
 
@@ -62,6 +62,71 @@ export class ProjectSnapshot {
   }
 
   /**
+   * Get the list of paths to binary files.
+   */
+  getBinaryFilePathsWithHash(): { path: string; hash: string; size: number }[] {
+    const allPaths = this.snapshot.getFilePathnames()
+    const paths = []
+    for (const path of allPaths) {
+      const file = this.snapshot.getFile(path)
+      if (file == null || file.isEditable()) {
+        continue
+      }
+      const hash = file.getHash()
+      const size = file.getByteLength()
+      if (hash == null) {
+        continue
+      }
+      if (size == null) {
+        continue
+      }
+      paths.push({ path, hash, size })
+    }
+    return paths
+  }
+
+  /**
+   * Use an algorithm similar to Kpathsea to locate files in the project snapshot:
+   *
+   * 1. look for the exact path relative to the root path
+   * 2. look for the path + extension relative to the root path
+   * 3. look for the exact path relative to the current path
+   * 4. look for the path + extension relative to the current path
+   */
+  locateFile(filePath: string, currentPath = '/', extensions = ['.tex']) {
+    // ignore absolute paths
+    if (filePath.startsWith('/')) {
+      return null
+    }
+
+    const snapshotPaths = new Set(this.snapshot.getFilePathnames())
+
+    const baseURLs = [
+      // relative to the root of the compile directory
+      new URL('https://overleaf.invalid'),
+    ]
+
+    if (currentPath !== '/') {
+      // relative to the current directory
+      baseURLs.push(new URL(currentPath, 'https://overleaf.invalid'))
+    }
+
+    const extensionsToTest = ['', ...extensions]
+
+    for (const baseURL of baseURLs) {
+      for (const extension of extensionsToTest) {
+        const { pathname } = new URL(`${filePath}${extension}`, baseURL)
+        const snapshotPath = pathname.substring(1) // remove leading slash
+        if (snapshotPaths.has(snapshotPath)) {
+          return snapshotPath
+        }
+      }
+    }
+
+    return null
+  }
+
+  /**
    * Get the doc content at the given path.
    */
   getDocContents(path: string): string | null {
@@ -70,6 +135,37 @@ export class ProjectSnapshot {
       return null
     }
     return file.getContent({ filterTrackedDeletes: true }) ?? null
+  }
+
+  async getBinaryFileContents(
+    path: string,
+    options?: { maxSize?: number }
+  ): Promise<any> {
+    const file = this.snapshot.getFile(path)
+    const hash = file?.getHash()
+    const byteLength = file?.getByteLength()
+    if (hash == null) {
+      return null
+    }
+    if (byteLength == null) {
+      return null
+    }
+    let blobStoreOptions
+    if (options?.maxSize != null && byteLength > options?.maxSize) {
+      blobStoreOptions = { maxSize: options.maxSize }
+    }
+    return await this.blobStore.getString(hash, blobStoreOptions)
+  }
+
+  getDocs(): Map<string, File> {
+    const files = new Map()
+    for (const path of this.snapshot.getFilePathnames()) {
+      const file = this.snapshot.getFile(path)
+      if (file?.isEditable()) {
+        files.set(path, file)
+      }
+    }
+    return files
   }
 
   /**
@@ -166,8 +262,11 @@ class SimpleBlobStore {
     this.projectId = projectId
   }
 
-  async getString(hash: string): Promise<string> {
-    return await fetchBlob(this.projectId, hash)
+  async getString(
+    hash: string,
+    options?: { maxSize?: number }
+  ): Promise<string> {
+    return await fetchBlob(this.projectId, hash, options)
   }
 
   async getObject(hash: string) {
@@ -226,9 +325,24 @@ async function fetchLatestChanges(
   }
 }
 
-async function fetchBlob(projectId: string, hash: string): Promise<string> {
+async function fetchBlob(
+  projectId: string,
+  hash: string,
+  options?: { maxSize?: number }
+): Promise<string> {
   const url = `/project/${projectId}/blob/${hash}`
-  const res = await fetch(url)
+  let fetchOpts
+  if (options?.maxSize === 0) {
+    return ''
+  }
+  if (options?.maxSize) {
+    fetchOpts = {
+      headers: {
+        Range: `bytes=0-${options.maxSize - 1}`,
+      },
+    }
+  }
+  const res = await fetch(url, fetchOpts)
   if (!res.ok) {
     throw new FetchError('Failed to fetch blob', url, undefined, res)
   }

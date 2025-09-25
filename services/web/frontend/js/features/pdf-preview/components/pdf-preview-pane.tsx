@@ -9,11 +9,16 @@ import { PdfPreviewMessages } from './pdf-preview-messages'
 import CompileTimeWarningUpgradePrompt from './compile-time-warning-upgrade-prompt'
 import { PdfPreviewProvider } from './pdf-preview-provider'
 import PdfPreviewHybridToolbarNew from '@/features/ide-redesign/components/pdf-preview/pdf-preview-hybrid-toolbar'
-import PdfErrorState from '@/features/ide-redesign/components/pdf-preview/pdf-error-state'
-import { useIsNewEditorEnabled } from '@/features/ide-redesign/utils/new-editor-utils'
+import PdfErrorState from '@/features/ide-redesign/components/pdf-preview/pdf-error-state/pdf-error-state'
+import {
+  useAreNewErrorLogsEnabled,
+  useIsNewEditorEnabled,
+  useIsNewErrorLogsPositionEnabled,
+} from '@/features/ide-redesign/utils/new-editor-utils'
 import importOverleafModules from '../../../../macros/import-overleaf-module.macro'
 import PdfCodeCheckFailedBanner from '@/features/ide-redesign/components/pdf-preview/pdf-code-check-failed-banner'
 import getMeta from '@/utils/meta'
+import NewPdfLogsViewer from '@/features/ide-redesign/components/pdf-preview/pdf-logs-viewer'
 
 function PdfPreviewPane() {
   const { pdfUrl } = useCompileContext()
@@ -22,6 +27,9 @@ function PdfPreviewPane() {
     'pdf-empty': !pdfUrl,
   })
   const newEditor = useIsNewEditorEnabled()
+  const newErrorLogs = useAreNewErrorLogsEnabled()
+  const newErrorLogsPosition = useIsNewErrorLogsPositionEnabled()
+
   const pdfPromotions = importOverleafModules('pdfPreviewPromotions') as {
     import: { default: ElementType }
     path: string
@@ -35,7 +43,7 @@ function PdfPreviewPane() {
         ) : (
           <PdfHybridPreviewToolbar />
         )}
-        {newEditor && <PdfCodeCheckFailedBanner />}
+        {newErrorLogs && <PdfCodeCheckFailedBanner />}
         <PdfPreviewMessages>
           {compileTimeout < 60 && <CompileTimeWarningUpgradePrompt />}
         </PdfPreviewMessages>
@@ -44,7 +52,13 @@ function PdfPreviewPane() {
             <PdfViewer />
           </div>
         </Suspense>
-        {newEditor ? <PdfErrorState /> : <PdfLogsViewer />}
+        {newErrorLogsPosition ? (
+          <PdfErrorState />
+        ) : newErrorLogs ? (
+          <NewPdfLogsViewer />
+        ) : (
+          <PdfLogsViewer />
+        )}
         {pdfPromotions.map(({ import: { default: Component }, path }) => (
           <Component key={path} />
         ))}

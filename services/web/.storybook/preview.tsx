@@ -13,10 +13,8 @@ import en from '../../../services/web/locales/en.json'
 function resetMeta() {
   window.metaAttributesCache = new Map()
   window.metaAttributesCache.set('ol-i18n', { currentLangCode: 'en' })
-  window.metaAttributesCache.set('ol-projectHistoryBlobsEnabled', true)
   window.metaAttributesCache.set('ol-capabilities', ['chat'])
   window.metaAttributesCache.set('ol-compileSettings', {
-    reducedTimeoutWarning: 'default',
     compileTimeout: 20,
   })
   window.metaAttributesCache.set('ol-ExposedSettings', {
@@ -131,7 +129,11 @@ const preview: Preview = {
     options: {
       storySort: {
         method: 'alphabetical',
-        order: ['Shared'],
+        order: [
+          'Storybook Guideline',
+          ['Foundations', 'Storybook builds', 'Feature Flags'],
+          'Shared',
+        ],
       },
     },
   },
@@ -154,7 +156,7 @@ const preview: Preview = {
       return {
         mainStyle: await import(
           // @ts-ignore
-          `!!to-string-loader!css-loader!resolve-url-loader!sass-loader!../../../services/web/frontend/stylesheets/bootstrap-5/main-style.scss`
+          `!!to-string-loader!css-loader!resolve-url-loader!sass-loader!../../../services/web/frontend/stylesheets/main-style.scss`
         ),
       }
     },

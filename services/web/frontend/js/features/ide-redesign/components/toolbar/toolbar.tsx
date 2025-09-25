@@ -1,10 +1,10 @@
+import { useTranslation } from 'react-i18next'
 import { ToolbarMenuBar } from './menu-bar'
 import { ToolbarProjectTitle } from './project-title'
 import { OnlineUsers } from './online-users'
 import ShareProjectButton from './share-project-button'
 import ChangeLayoutButton from './change-layout-button'
 import ShowHistoryButton from './show-history-button'
-import { LabsActions } from './labs-actions'
 import { useLayoutContext } from '@/shared/context/layout-context'
 import BackToEditorButton from '@/features/editor-navigation-toolbar/components/back-to-editor-button'
 import { useCallback } from 'react'
@@ -15,6 +15,7 @@ import importOverleafModules from '../../../../../macros/import-overleaf-module.
 import UpgradeButton from './upgrade-button'
 import getMeta from '@/utils/meta'
 import { useIdeReactContext } from '@/features/ide-react/context/ide-react-context'
+import { BetaActions } from './beta-actions'
 
 const [publishModalModules] = importOverleafModules('publishModal')
 const SubmitProjectButton = publishModalModules?.import.NewPublishToolbarButton
@@ -23,6 +24,7 @@ export const Toolbar = () => {
   const { view, restoreView } = useLayoutContext()
   const { cobranding } = useEditorContext()
   const { permissionsLevel } = useIdeReactContext()
+  const { t } = useTranslation()
   const shouldDisplaySubmitButton =
     (permissionsLevel === 'owner' || permissionsLevel === 'readAndWrite') &&
     SubmitProjectButton
@@ -34,25 +36,25 @@ export const Toolbar = () => {
 
   if (view === 'history') {
     return (
-      <div className="ide-redesign-toolbar">
+      <nav className="ide-redesign-toolbar" aria-label={t('project_actions')}>
         <div className="d-flex align-items-center">
           <BackToEditorButton onClick={handleBackToEditorClick} />
         </div>
         <ToolbarProjectTitle />
         <div /> {/* Empty div used for spacing */}
-      </div>
+      </nav>
     )
   }
 
   return (
-    <div className="ide-redesign-toolbar">
+    <nav className="ide-redesign-toolbar" aria-label={t('project_actions')}>
       <div className="ide-redesign-toolbar-menu">
         <ToolbarLogos cobranding={cobranding} />
         <ToolbarMenuBar />
       </div>
       <ToolbarProjectTitle />
       <div className="ide-redesign-toolbar-actions">
-        <LabsActions />
+        <BetaActions />
         <OnlineUsers />
         <ShowHistoryButton />
         <ChangeLayoutButton />
@@ -62,6 +64,6 @@ export const Toolbar = () => {
         <ShareProjectButton />
         {getMeta('ol-showUpgradePrompt') && <UpgradeButton />}
       </div>
-    </div>
+    </nav>
   )
 }

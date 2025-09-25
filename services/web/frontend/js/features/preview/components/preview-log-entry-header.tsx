@@ -2,8 +2,8 @@ import classNames from 'classnames'
 import { useState, useRef, MouseEventHandler } from 'react'
 import { useTranslation } from 'react-i18next'
 import useResizeObserver from '../hooks/use-resize-observer'
-import OLTooltip from '@/features/ui/components/ol/ol-tooltip'
-import OLButton from '@/features/ui/components/ol/ol-button'
+import OLTooltip from '@/shared/components/ol/ol-tooltip'
+import OLButton from '@/shared/components/ol/ol-button'
 import MaterialIcon from '@/shared/components/material-icon'
 import { ErrorLevel, SourceLocation } from '@/features/pdf-preview/util/types'
 
@@ -99,7 +99,7 @@ function PreviewLogEntryHeader({
   const headerTitleText = logType ? `${logType} ${headerTitle}` : headerTitle
 
   return (
-    <header className={logEntryHeaderClasses}>
+    <div className={logEntryHeaderClasses}>
       {headerIcon ? (
         <div className="log-entry-header-icon-container">{headerIcon}</div>
       ) : null}
@@ -116,7 +116,7 @@ function PreviewLogEntryHeader({
       ) : (
         locationLink
       )}
-    </header>
+    </div>
   )
 }
 

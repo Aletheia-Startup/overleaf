@@ -432,6 +432,7 @@ module.exports = {
   ],
 
   disableChat: process.env.OVERLEAF_DISABLE_CHAT === 'true',
+  disableLinkSharing: process.env.OVERLEAF_DISABLE_LINK_SHARING === 'true',
   enableSubscriptions: false,
   restrictedCountries: [],
   enableOnboardingEmails: process.env.ENABLE_ONBOARDING_EMAILS === 'true',
@@ -439,9 +440,6 @@ module.exports = {
   enabledLinkedFileTypes: (process.env.ENABLED_LINKED_FILE_TYPES || '').split(
     ','
   ),
-
-  filestoreMigrationLevel:
-    parseInt(process.env.OVERLEAF_FILESTORE_MIGRATION_LEVEL, 10) || 0,
 
   // i18n
   // ------
@@ -661,7 +659,8 @@ module.exports = {
   // If you are running Overleaf behind a proxy (like Apache, Nginx, etc)
   // then set this to true to allow it to correctly detect the forwarded IP
   // address and http/https protocol information.
-  behindProxy: false,
+  behindProxy: true,
+  trustedProxyIps: process.env.TRUSTED_PROXY_IPS || 'loopback',
 
   // Delay before closing the http server upon receiving a SIGTERM process signal.
   gracefulShutdownDelayInMs:
@@ -708,6 +707,13 @@ module.exports = {
   max_doc_length: 2 * 1024 * 1024, // 2mb
 
   primary_email_check_expiration: 1000 * 60 * 60 * 24 * 90, // 90 days
+
+  userHardDeletionDelay:
+    parseInt(process.env.OVERLEAF_USER_HARD_DELETION_DELAY, 10) ||
+    1000 * 60 * 60 * 24 * 90, // 90 days
+  projectHardDeletionDelay:
+    parseInt(process.env.OVERLEAF_PROJECT_HARD_DELETION_DELAY, 10) ||
+    1000 * 60 * 60 * 24 * 90, // 90 days
 
   // Maximum JSON size in HTTP requests
   // We should be able to process twice the max doc length, to allow for
@@ -1000,6 +1006,7 @@ module.exports = {
     v1ImportDataScreen: [],
     snapshotUtils: [],
     usGovBanner: [],
+    rollingBuildsUpdatedAlert: [],
     offlineModeToolbarButtons: [],
     settingsEntries: [],
     autoCompleteExtensions: [],
@@ -1026,6 +1033,7 @@ module.exports = {
     integrationPanelComponents: [],
     referenceSearchSetting: [],
     errorLogsComponents: [],
+    referenceIndices: [],
   },
 
   moduleImportSequence: [

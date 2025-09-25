@@ -4,6 +4,8 @@ notifications
 --env-add=
 --env-pass-through=
 --esmock-loader=False
---node-version=22.17.0
+--node-version=22.18.0
 --public-repo=True
---script-version=4.7.0
+--test-acceptance-vitest=True
+--test-unit-vitest=True
+--tsconfig-extra-includes=vitest.config.unit.cjs,vitest.config.acceptance.cjs

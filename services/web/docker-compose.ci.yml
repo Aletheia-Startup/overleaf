@@ -1,5 +1,3 @@
-version: "2.3"
-
 volumes:
   data:
 
@@ -15,7 +13,7 @@ services:
     user: node
     volumes:
       - ../../bin/shared/wait_for_it:/overleaf/bin/shared/wait_for_it
-    entrypoint: /overleaf/bin/shared/wait_for_it mongo:27017 --timeout=0 --
+    entrypoint: /overleaf/bin/shared/wait_for_it mongo:27017 --timeout=60 --
     command: npm run test:unit:app
     working_dir: /overleaf/services/web
     env_file: docker-compose.common.env
@@ -24,8 +22,10 @@ services:
       OVERLEAF_CONFIG:
       NODE_ENV: test
       NODE_OPTIONS: "--unhandled-rejections=strict"
+      REDIS_HOST: redis_test
       VITEST_NO_CACHE: true
     depends_on:
+      - redis_test
       - mongo
 
   test_acceptance:
@@ -40,15 +40,16 @@ services:
     environment:
       BASE_CONFIG:
       OVERLEAF_CONFIG:
+      REDIS_HOST: redis_test
     extra_hosts:
       - 'www.overleaf.test:127.0.0.1'
     volumes:
       - ../../bin/shared/wait_for_it:/overleaf/bin/shared/wait_for_it
-    entrypoint: /overleaf/bin/shared/wait_for_it mongo:27017 --timeout=0 --
+    entrypoint: /overleaf/bin/shared/wait_for_it mongo:27017 --timeout=60 --
     command: npm run test:acceptance:app
     user: root
     depends_on:
-      - redis
+      - redis_test
       - mongo
       - saml
       - ldap
@@ -84,6 +85,19 @@ services:
       - "run"
       - "cypress:run-ct"
 
+  test_writefull:
+    build:
+      context: ../..
+      dockerfile: services/web/Dockerfile
+    image: ci/$PROJECT_NAME:$BRANCH_NAME-$BUILD_NUMBER
+    logging:
+      driver: local
+    user: node
+    working_dir: /overleaf/services/web
+    command: npm run test:writefull
+    environment:
+      NODE_OPTIONS: "--unhandled-rejections=strict"
+
   tar:
     image: ci/$PROJECT_NAME:$BRANCH_NAME-$BUILD_NUMBER-webpack
     volumes:
@@ -91,16 +105,16 @@ services:
     command: tar -cf /tmp/build/build.tar public/
     user: root
 
-  redis:
+  redis_test:
     image: redis:7.4.3
 
   mongo:
     image: mongo:8.0.11
-    logging:
-      driver: none
     command: --replSet overleaf
     volumes:
       - ../../bin/shared/mongodb-init-replica-set.js:/docker-entrypoint-initdb.d/mongodb-init-replica-set.js
+      - ../../bin/shared/mongodb-docker-entrypoint-wait.sh:/mongodb-docker-entrypoint-wait.sh
+    entrypoint: /mongodb-docker-entrypoint-wait.sh
     environment:
       MONGO_INITDB_DATABASE: sharelatex
     extra_hosts:

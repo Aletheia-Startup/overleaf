@@ -8,9 +8,8 @@ import {
 import EmailsHeader from './emails/header'
 import EmailsRow from './emails/row'
 import AddEmail from './emails/add-email'
-import OLNotification from '@/features/ui/components/ol/ol-notification'
-import OLSpinner from '@/features/ui/components/ol/ol-spinner'
-import { LeaversSurveyAlert } from './leavers-survey-alert'
+import OLNotification from '@/shared/components/ol/ol-notification'
+import OLSpinner from '@/shared/components/ol/ol-spinner'
 
 function EmailsSectionContent() {
   const { t } = useTranslation()
@@ -76,7 +75,6 @@ function EmailsSectionContent() {
             ))}
           </>
         )}
-        {isInitializingSuccess && <LeaversSurveyAlert />}
         {isInitializingSuccess && !hideAddSecondaryEmail && <AddEmail />}
         {isInitializingError && (
           <OLNotification

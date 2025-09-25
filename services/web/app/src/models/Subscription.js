@@ -45,6 +45,7 @@ const SubscriptionSchema = new Schema(
       groupSSO: { type: Boolean, default: true },
       domainCapture: { type: Boolean, default: false },
     },
+    userFeaturesDisabled: Boolean,
     addOns: Schema.Types.Mixed,
     overleaf: {
       id: {
@@ -75,6 +76,12 @@ const SubscriptionSchema = new Schema(
       },
       state: {
         type: String,
+      },
+      pausePeriodStart: {
+        type: Date,
+      },
+      pausePeriodEnd: {
+        type: Date,
       },
       trialStartedAt: {
         type: Date,

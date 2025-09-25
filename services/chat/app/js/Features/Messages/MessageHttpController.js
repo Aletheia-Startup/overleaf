@@ -42,6 +42,10 @@ export async function getGlobalMessages(context) {
   return await callMessageHttpController(context, _getGlobalMessages)
 }
 
+export async function getGlobalMessage(context) {
+  return await callMessageHttpController(context, _getGlobalMessage)
+}
+
 export async function sendGlobalMessage(context) {
   return await callMessageHttpController(context, _sendGlobalMessage)
 }
@@ -52,6 +56,10 @@ export async function sendMessage(context) {
 
 export async function getThreads(context) {
   return await callMessageHttpController(context, _getAllThreads)
+}
+
+export async function getThread(context) {
+  return await callMessageHttpController(context, _getThread)
 }
 
 export async function resolveThread(context) {
@@ -104,6 +112,31 @@ const _getGlobalMessages = async (req, res) => {
   await _getMessages(ThreadManager.GLOBAL_THREAD, req, res)
 }
 
+const _getGlobalMessage = async (req, res) => {
+  const { projectId, messageId } = req.params
+  logger.debug({ projectId, messageId }, 'getting single global message')
+  try {
+    const room = await ThreadManager.findThread(
+      projectId,
+      ThreadManager.GLOBAL_THREAD
+    )
+
+    const message = await MessageManager.getMessage(room._id, messageId)
+    const formattedMsg = MessageFormatter.formatMessageForClientSide(message)
+
+    res.status(200).setBody(formattedMsg)
+  } catch (error) {
+    if (
+      error instanceof ThreadManager.MissingThreadError ||
+      error instanceof MessageManager.MissingMessageError
+    ) {
+      res.status(404)
+      return
+    }
+    throw error
+  }
+}
+
 async function _sendGlobalMessage(req, res) {
   const { user_id: userId, content } = req.body
   const { projectId } = req.params
@@ -142,6 +175,29 @@ const _generateThreadData = async (req, res) => {
   logger.debug({ rooms, messages }, 'looked up messages in the rooms')
   const threadData = MessageFormatter.groupMessagesByThreads(rooms, messages)
   res.json(threadData)
+}
+
+const _getThread = async (req, res) => {
+  const { projectId, threadId } = req.params
+  logger.debug({ projectId, threadId }, 'getting specific thread')
+  try {
+    const room = await ThreadManager.findThread(projectId, threadId)
+    const messages = await MessageManager.findAllMessagesInRooms([room._id])
+    const threads = MessageFormatter.groupMessagesByThreads([room], messages)
+
+    const thread = threads[threadId] || null
+    if (!thread) {
+      res.status(404)
+      return
+    }
+    res.json(thread)
+  } catch (error) {
+    if (error instanceof ThreadManager.MissingThreadError) {
+      res.status(404)
+      return
+    }
+    throw error
+  }
 }
 
 const _resolveThread = async (req, res) => {

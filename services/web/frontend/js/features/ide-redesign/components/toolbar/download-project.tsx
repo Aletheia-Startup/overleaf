@@ -1,11 +1,12 @@
 import { useCommandProvider } from '@/features/ide-react/hooks/use-command-provider'
-import OLDropdownMenuItem from '@/features/ui/components/ol/ol-dropdown-menu-item'
-import OLTooltip from '@/features/ui/components/ol/ol-tooltip'
+import OLDropdownMenuItem from '@/shared/components/ol/ol-dropdown-menu-item'
+import OLTooltip from '@/shared/components/ol/ol-tooltip'
 import { isSmallDevice, sendMB } from '@/infrastructure/event-tracking'
 import { useDetachCompileContext as useCompileContext } from '@/shared/context/detach-compile-context'
 import { useProjectContext } from '@/shared/context/project-context'
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useEditorAnalytics } from '@/shared/hooks/use-editor-analytics'
 
 export const DownloadProjectZip = () => {
   const { t } = useTranslation()
@@ -45,13 +46,14 @@ export const DownloadProjectPDF = () => {
   const { t } = useTranslation()
   const { pdfDownloadUrl, pdfUrl } = useCompileContext()
   const { projectId } = useProjectContext()
+  const { sendEvent } = useEditorAnalytics()
   const sendDownloadEvent = useCallback(() => {
-    sendMB('download-pdf-button-click', {
+    sendEvent('download-pdf-button-click', {
       projectId,
       location: 'project-name-dropdown',
       isSmallDevice,
     })
-  }, [projectId])
+  }, [projectId, sendEvent])
 
   useCommandProvider(
     () => [
@@ -60,7 +62,7 @@ export const DownloadProjectPDF = () => {
         disabled: !pdfUrl,
         href: pdfDownloadUrl || pdfUrl,
         handler: ({ location }) => {
-          sendMB('download-pdf-button-click', {
+          sendEvent('download-pdf-button-click', {
             projectId,
             location,
             isSmallDevice,
@@ -69,7 +71,7 @@ export const DownloadProjectPDF = () => {
         label: t('download_as_pdf'),
       },
     ],
-    [t, pdfUrl, projectId, pdfDownloadUrl]
+    [t, pdfUrl, projectId, pdfDownloadUrl, sendEvent]
   )
 
   const button = (

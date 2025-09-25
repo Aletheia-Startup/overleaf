@@ -134,26 +134,19 @@ async function cancelPendingSubscriptionChange(user) {
  * @param user
  */
 async function cancelSubscription(user) {
-  try {
-    const { hasSubscription, subscription } =
-      await LimitationsManager.promises.userHasSubscription(user)
-    if (hasSubscription && subscription != null) {
-      await Modules.promises.hooks.fire('cancelPaidSubscription', subscription)
-      const emailOpts = {
-        to: user.email,
-        first_name: user.first_name,
-      }
-      const ONE_HOUR_IN_MS = 1000 * 60 * 60
-      EmailHandler.sendDeferredEmail(
-        'canceledSubscription',
-        emailOpts,
-        ONE_HOUR_IN_MS
-      )
+  const { hasSubscription, subscription } =
+    await LimitationsManager.promises.userHasSubscription(user)
+  if (hasSubscription && subscription != null) {
+    await Modules.promises.hooks.fire('cancelPaidSubscription', subscription)
+    const emailOpts = {
+      to: user.email,
+      first_name: user.first_name,
     }
-  } catch (err) {
-    logger.warn(
-      { err, userId: user._id },
-      'there was an error checking user v2 subscription'
+    const ONE_HOUR_IN_MS = 1000 * 60 * 60
+    EmailHandler.sendDeferredEmail(
+      'canceledSubscription',
+      emailOpts,
+      ONE_HOUR_IN_MS
     )
   }
 }
@@ -292,6 +285,16 @@ async function removeAddon(userId, addOnCode) {
   await Modules.promises.hooks.fire('removeAddOn', userId, addOnCode)
 }
 
+/**
+ * Reactivates an add-on pending cancellation
+ *
+ * @param {string} userId
+ * @param {string} addOnCode
+ */
+async function reactivateAddon(userId, addOnCode) {
+  await Modules.promises.hooks.fire('reactivateAddOn', userId, addOnCode)
+}
+
 async function pauseSubscription(user, pauseCycles) {
   // only allow pausing on monthly plans not in a trial
   const { subscription } =
@@ -335,9 +338,7 @@ async function resumeSubscription(user) {
   ) {
     throw new Error('No active subscription to resume')
   }
-  await RecurlyClient.promises.resumeSubscriptionByUuid(
-    subscription.recurlySubscription_id
-  )
+  await Modules.promises.hooks.fire('resumePaidSubscription', subscription)
 }
 
 /**
@@ -428,6 +429,7 @@ module.exports = {
   previewAddonPurchase: callbackify(previewAddonPurchase),
   purchaseAddon: callbackify(purchaseAddon),
   removeAddon: callbackify(removeAddon),
+  reactivateAddon: callbackify(reactivateAddon),
   pauseSubscription: callbackify(pauseSubscription),
   resumeSubscription: callbackify(resumeSubscription),
   revertPlanChange: callbackify(revertPlanChange),
@@ -447,6 +449,7 @@ module.exports = {
     previewAddonPurchase,
     purchaseAddon,
     removeAddon,
+    reactivateAddon,
     pauseSubscription,
     resumeSubscription,
     revertPlanChange,

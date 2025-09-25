@@ -15,10 +15,10 @@ import importOverleafModules from '../../../../macros/import-overleaf-module.mac
 import BackToEditorButton from './back-to-editor-button'
 import getMeta from '@/utils/meta'
 import { isSplitTestEnabled } from '@/utils/splitTestUtils'
-import { canUseNewEditor } from '@/features/ide-redesign/utils/new-editor-utils'
 import TryNewEditorButton from '../try-new-editor-button'
 import { OnlineUser } from '@/features/ide-react/context/online-users-context'
 import { Cobranding } from '../../../../../types/cobranding'
+import { canUseNewEditor } from '@/features/ide-redesign/utils/new-editor-utils'
 
 const [publishModalModules] = importOverleafModules('publishModal') as {
   import: { default: ElementType }
@@ -88,11 +88,7 @@ const ToolbarHeader = React.memo(function ToolbarHeader({
   const shouldDisplayPublishButton = hasPublishPermissions && PublishButton
 
   return (
-    <header
-      className="toolbar toolbar-header"
-      role="navigation"
-      aria-label={t('project_layout_sharing_submission')}
-    >
+    <nav className="toolbar toolbar-header" aria-label={t('project_actions')}>
       <div className="toolbar-left">
         <MenuButton onClick={onShowLeftMenuClick} />
         {cobranding && cobranding.logoImgUrl && (
@@ -158,7 +154,7 @@ const ToolbarHeader = React.memo(function ToolbarHeader({
           </>
         )}
       </div>
-    </header>
+    </nav>
   )
 })
 

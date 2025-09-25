@@ -27,40 +27,57 @@ describe('LearnWiki', function () {
     it('should add a documentation entry to the nav bar', () => {
       login(REGULAR_USER)
       cy.visit('/project')
-      cy.get('nav').findByText('Documentation')
+      cy.findByRole('menuitem', { name: 'Documentation' }).should(
+        'have.attr',
+        'href',
+        '/learn'
+      )
     })
 
     it('should display a tutorial link in the welcome page', () => {
       login(WITHOUT_PROJECTS_USER)
       cy.visit('/project')
-      cy.findByText(LABEL_LEARN_LATEX)
+      cy.findByRole('link', { name: LABEL_LEARN_LATEX })
+        .should('have.attr', 'href', '/learn/latex/Learn_LaTeX_in_30_minutes')
+        .and('have.attr', 'target', '_blank')
+        .within(() => {
+          cy.get('img').should('have.attr', 'src').and('not.be.empty')
+        })
     })
 
     it('should render wiki page', () => {
       login(REGULAR_USER)
+
       cy.visit(UPLOADING_A_PROJECT_URL)
-      // Wiki content
-      cy.get('.page').findByText('Uploading a project')
-      cy.get('.page').contains(/how to create an Overleaf project/)
-      cy.get('img[alt="Creating a new project on Overleaf"]')
+      cy.findByRole('heading', { name: 'Uploading a project' })
+      cy.contains(/how to create an Overleaf project/)
+      cy.findByRole('img', { name: 'Creating a new project on Overleaf' })
         .should('be.visible')
         .and((el: any) => {
           expect(el[0].naturalWidth, 'renders image').to.be.greaterThan(0)
         })
-      // Wiki navigation
-      cy.get('.contents').findByText('Copying a project')
+
+      cy.visit(COPYING_A_PROJECT_URL)
+      cy.findByRole('heading', { name: 'Copying a project' })
+      cy.findByRole('link', {
+        name: '1 How to copy a project (option 1)',
+      }).should('exist')
+      cy.findByRole('link', {
+        name: '2 How to copy a project (option 2)',
+      }).should('exist')
     })
 
-    it('should navigate back and forth', function () {
+    it('should navigate within wiki page using table of contents', function () {
       login(REGULAR_USER)
       cy.visit(COPYING_A_PROJECT_URL)
-      cy.get('.page').findByText('Copying a project')
-      cy.get('.contents').findByText('Uploading a project').click()
-      cy.url().should('contain', UPLOADING_A_PROJECT_URL)
-      cy.get('.page').findByText('Uploading a project')
-      cy.get('.contents').findByText('Copying a project').click()
+      cy.findByRole('heading', { name: 'Copying a project' })
+      cy.findByRole('link', {
+        name: '2 How to copy a project (option 2)',
+      }).click()
       cy.url().should('contain', COPYING_A_PROJECT_URL)
-      cy.get('.page').findByText('Copying a project')
+      cy.findByRole('heading', {
+        name: 'How to copy a project (option 2)',
+      }).should('be.visible')
     })
   })
 

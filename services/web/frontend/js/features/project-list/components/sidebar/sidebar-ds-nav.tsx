@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import classnames from 'classnames'
 import { Question, User } from '@phosphor-icons/react'
 import NewProjectButton from '../new-project-button'
@@ -7,13 +8,12 @@ import AddAffiliation, { useAddAffiliation } from '../add-affiliation'
 import { usePersistedResize } from '@/shared/hooks/use-resize'
 import { Dropdown } from 'react-bootstrap'
 import getMeta from '@/utils/meta'
-import OLTooltip from '@/features/ui/components/ol/ol-tooltip'
-import { useTranslation } from 'react-i18next'
-import { NavDropdownMenuItems } from '@/features/ui/components/bootstrap-5/navbar/nav-dropdown-from-data'
-import { NavbarDropdownItemData } from '@/features/ui/components/types/navbar'
+import OLTooltip from '@/shared/components/ol/ol-tooltip'
+import { NavDropdownMenuItems } from '@/shared/components/navbar/nav-dropdown-from-data'
+import { NavbarDropdownItemData } from '@/shared/components/types/navbar'
 import { useContactUsModal } from '@/shared/hooks/use-contact-us-modal'
 import { UserProvider } from '@/shared/context/user-context'
-import { AccountMenuItems } from '@/features/ui/components/bootstrap-5/navbar/account-menu-items'
+import { AccountMenuItems } from '@/shared/components/navbar/account-menu-items'
 import { useScrolled } from '@/features/project-list/components/sidebar/use-scroll'
 import { useSendProjectListMB } from '@/features/project-list/components/project-list-events'
 import { SurveyWidgetDsNav } from '@/features/project-list/components/survey-widget-ds-nav'
@@ -45,19 +45,24 @@ function SidebarDsNav() {
         },
       })}
     >
-      <NewProjectButton
-        id="new-project-button-sidebar"
-        className={scrolledDown ? 'show-shadow' : undefined}
-      />
-      <div
-        className="project-list-sidebar-scroll"
-        ref={containerRef}
-        data-testid="project-list-sidebar-scroll"
+      <nav
+        className="flex-grow flex-shrink"
+        aria-label={t('project_categories_tags')}
       >
-        <SidebarFilters />
-        {showAddAffiliationWidget && <hr />}
-        <AddAffiliation />
-      </div>
+        <NewProjectButton
+          id="new-project-button-sidebar"
+          className={scrolledDown ? 'show-shadow' : undefined}
+        />
+        <div
+          className="project-list-sidebar-scroll"
+          ref={containerRef}
+          data-testid="project-list-sidebar-scroll"
+        >
+          <SidebarFilters />
+          {showAddAffiliationWidget && <hr />}
+          <AddAffiliation />
+        </div>
+      </nav>
       <div
         className={classnames(
           'ds-nav-sidebar-lower',
@@ -67,7 +72,10 @@ function SidebarDsNav() {
         <div className="project-list-sidebar-survey-wrapper">
           <SurveyWidgetDsNav />
         </div>
-        <div className="d-flex gap-3 mb-2">
+        <nav
+          className="d-flex flex-row gap-3 mb-2"
+          aria-label={t('account_help')}
+        >
           {helpItem && (
             <Dropdown
               className="ds-nav-icon-dropdown"
@@ -85,8 +93,8 @@ function SidebarDsNav() {
                   id="help-icon"
                   overlayProps={{
                     placement: 'top',
-                    show: showHelpDropdown ? false : undefined,
                   }}
+                  hidden={showHelpDropdown}
                 >
                   <div>
                     <Question size={24} />
@@ -130,8 +138,8 @@ function SidebarDsNav() {
                     id="open-account"
                     overlayProps={{
                       placement: 'top',
-                      show: showAccountDropdown ? false : undefined,
                     }}
+                    hidden={showAccountDropdown}
                   >
                     <div>
                       <User size={24} />
@@ -157,7 +165,7 @@ function SidebarDsNav() {
               <UserProvider>{contactUsModal}</UserProvider>
             </>
           )}
-        </div>
+        </nav>
         <div className="ds-nav-ds-name" translate="no">
           <span>Digital Science</span>
         </div>

@@ -15,6 +15,11 @@ const SubscriptionLocator = {
     const userId = SubscriptionLocator._getUserId(userOrId)
     const subscription = await Subscription.findOne({ admin_id: userId }).exec()
     logger.debug({ userId }, 'got users subscription')
+
+    if (subscription) {
+      return await SubscriptionHelper.recomputeSubscriptionState(subscription)
+    }
+
     return subscription
   },
 
@@ -89,7 +94,7 @@ const SubscriptionLocator = {
   async getGroupSubscriptionsMemberOf(userId) {
     return await Subscription.find(
       { member_ids: userId },
-      { _id: 1, planCode: 1 }
+      { _id: 1, planCode: 1, userFeaturesDisabled: 1 }
     )
   },
 

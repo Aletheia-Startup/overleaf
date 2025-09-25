@@ -3,7 +3,7 @@ import { useTranslation, Trans } from 'react-i18next'
 import Notification from '../notification'
 import getMeta from '../../../../../utils/meta'
 import useAsyncDismiss from '../hooks/useAsyncDismiss'
-import OLButton from '@/features/ui/components/ol/ol-button'
+import OLButton from '@/shared/components/ol/ol-button'
 
 function Institution() {
   const { t } = useTranslation()
@@ -80,6 +80,21 @@ function Institution() {
                 content={
                   <Trans
                     i18nKey="account_has_been_link_to_institution_account"
+                    components={{ b: <b /> }}
+                    values={{ appName, email, institutionName }}
+                    shouldUnescape
+                    tOptions={{ interpolation: { escapeValue: true } }}
+                  />
+                }
+              />
+            )}
+            {templateKey === 'notification_group_sso_linked' && (
+              <Notification
+                type="info"
+                onDismiss={() => id && handleDismiss(id)}
+                content={
+                  <Trans
+                    i18nKey="account_has_been_link_to_group_account"
                     components={{ b: <b /> }}
                     values={{ appName, email, institutionName }}
                     shouldUnescape

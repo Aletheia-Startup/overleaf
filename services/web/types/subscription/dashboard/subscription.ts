@@ -14,16 +14,20 @@ export type SubscriptionState =
   | 'expired'
   | 'paused'
   | 'past_due'
+  | 'incomplete'
+  | 'incomplete_expired'
 
 // when puchasing a new add-on in recurly, we only need to provide the code
 export type PurchasingAddOnCode = {
   code: string
 }
 
-type PaymentProviderCoupon = {
+export type PaymentProviderCoupon = {
   code: string
   name: string
-  description: string
+  description?: string
+  isSingleUse?: boolean
+  discountMonths?: number | null
 }
 
 type PaymentProviderRecord = {
@@ -107,11 +111,15 @@ export type MemberGroupSubscription = Omit<GroupSubscription, 'admin_id'> & {
   admin_id: User
 }
 
-type PaymentProviderService = 'stripe-us' | 'stripe-uk' | 'recurly'
-export type StripePaymentProviderService = Exclude<
-  PaymentProviderService,
-  'recurly'
->
+const STRIPE_PAYMENT_PROVIDER_SERVICES = ['stripe-uk', 'stripe-us'] as const
+const PAYMENT_PROVIDER_SERVICES = [
+  ...STRIPE_PAYMENT_PROVIDER_SERVICES,
+  'recurly',
+] as const
+
+export type PaymentProviderService = (typeof PAYMENT_PROVIDER_SERVICES)[number]
+export type StripePaymentProviderService =
+  (typeof STRIPE_PAYMENT_PROVIDER_SERVICES)[number]
 
 export type PaymentProvider = {
   service: PaymentProviderService
@@ -124,4 +132,13 @@ export type PaymentProvider = {
 export type SubscriptionRequesterData = {
   id?: string
   ip?: string
+}
+
+export type SubscriptionBillingAddress = {
+  line1?: string
+  line2?: string
+  city?: string
+  state?: string
+  postal_code: string
+  country: string
 }

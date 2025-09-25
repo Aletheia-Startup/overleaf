@@ -4,6 +4,10 @@ const { fetchJson, fetchNothing } = require('@overleaf/fetch-utils')
 const settings = require('@overleaf/settings')
 const { callbackify } = require('util')
 
+async function getThread(projectId, threadId) {
+  return await fetchJson(chatApiUrl(`/project/${projectId}/thread/${threadId}`))
+}
+
 async function getThreads(projectId) {
   return await fetchJson(chatApiUrl(`/project/${projectId}/threads`))
 }
@@ -33,6 +37,12 @@ async function getGlobalMessages(projectId, limit, before) {
   }
 
   return await fetchJson(url)
+}
+
+async function getGlobalMessage(projectId, messageId) {
+  return await fetchJson(
+    chatApiUrl(`/project/${projectId}/messages/${messageId}`)
+  )
 }
 
 async function sendComment(projectId, threadId, userId, content) {
@@ -133,10 +143,12 @@ function chatApiUrl(path) {
 }
 
 module.exports = {
+  getThread: callbackify(getThread),
   getThreads: callbackify(getThreads),
   destroyProject: callbackify(destroyProject),
   sendGlobalMessage: callbackify(sendGlobalMessage),
   getGlobalMessages: callbackify(getGlobalMessages),
+  getGlobalMessage: callbackify(getGlobalMessage),
   sendComment: callbackify(sendComment),
   resolveThread: callbackify(resolveThread),
   reopenThread: callbackify(reopenThread),
@@ -148,10 +160,12 @@ module.exports = {
   duplicateCommentThreads: callbackify(duplicateCommentThreads),
   generateThreadData: callbackify(generateThreadData),
   promises: {
+    getThread,
     getThreads,
     destroyProject,
     sendGlobalMessage,
     getGlobalMessages,
+    getGlobalMessage,
     sendComment,
     resolveThread,
     reopenThread,

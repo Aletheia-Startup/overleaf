@@ -13,10 +13,12 @@ import {
   OLModalFooter,
   OLModalHeader,
   OLModalTitle,
-} from '@/features/ui/components/ol/ol-modal'
-import OLFormControl from '@/features/ui/components/ol/ol-form-control'
-import OLButton from '@/features/ui/components/ol/ol-button'
-import OLForm from '@/features/ui/components/ol/ol-form'
+} from '@/shared/components/ol/ol-modal'
+import OLFormControl from '@/shared/components/ol/ol-form-control'
+import OLButton from '@/shared/components/ol/ol-button'
+import OLForm from '@/shared/components/ol/ol-form'
+import OLFormLabel from '@/shared/components/ol/ol-form-label'
+import OLFormGroup from '@/shared/components/ol/ol-form-group'
 
 type NewProjectData = {
   project_id: string
@@ -86,13 +88,15 @@ function ModalContentNewProjectForm({ onCancel, template = 'none' }: Props) {
           </div>
         )}
         <OLForm onSubmit={handleSubmit}>
-          <OLFormControl
-            type="text"
-            ref={autoFocusedRef}
-            placeholder={t('project_name')}
-            onChange={handleChangeName}
-            value={projectName}
-          />
+          <OLFormGroup controlId="project-name">
+            <OLFormLabel>{t('project_name')}</OLFormLabel>
+            <OLFormControl
+              type="text"
+              ref={autoFocusedRef}
+              onChange={handleChangeName}
+              value={projectName}
+            />
+          </OLFormGroup>
         </OLForm>
       </OLModalBody>
 

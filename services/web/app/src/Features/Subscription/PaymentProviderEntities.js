@@ -6,6 +6,16 @@
  * @import { AddOn } from '../../../../types/subscription/plan'
  */
 
+/**
+ * @typedef {object} ImmediateChargeLineItem
+ * @property {string | null | undefined} planCode
+ * @property {string} description
+ * @property {number} subtotal
+ * @property {number} discount
+ * @property {number} tax
+ * @property {boolean} isAiAssist
+ */
+
 const OError = require('@overleaf/o-error')
 const { DuplicateAddOnError, AddOnNotPresentError } = require('./Errors')
 const PlansLocator = require('./PlansLocator')
@@ -40,6 +50,7 @@ class PaymentProviderSubscription {
    * @param {Date|null} [props.trialPeriodStart]
    * @param {Date|null} [props.trialPeriodEnd]
    * @param {Date|null} [props.pausePeriodStart]
+   * @param {Date|null} [props.pausePeriodEnd]
    * @param {number|null} [props.remainingPauseCycles]
    */
   constructor(props) {
@@ -66,6 +77,7 @@ class PaymentProviderSubscription {
     this.trialPeriodStart = props.trialPeriodStart ?? null
     this.trialPeriodEnd = props.trialPeriodEnd ?? null
     this.pausePeriodStart = props.pausePeriodStart ?? null
+    this.pausePeriodEnd = props.pausePeriodEnd ?? null
     this.remainingPauseCycles = props.remainingPauseCycles ?? null
   }
 
@@ -255,6 +267,36 @@ class PaymentProviderSubscription {
     return new PaymentProviderSubscriptionChangeRequest({
       subscription: this,
       timeframe: isInTrial ? 'now' : 'term_end',
+      addOnUpdates,
+    })
+  }
+
+  /**
+   * Reactivate an add-on on this subscription
+   *
+   * @param {string} code - add-on code
+   * @return {PaymentProviderSubscriptionChangeRequest}
+   *
+   * @throws {AddOnNotPresentError} if the add-on is not pending cancellation
+   */
+  getRequestForAddOnReactivation(code) {
+    const reactivatedAddOn = this.addOns.find(addOn => addOn.code === code)
+    const pendingChange = this.pendingChange
+    if (reactivatedAddOn == null || pendingChange == null) {
+      throw new AddOnNotPresentError('Add-on is not pending cancellation', {
+        subscriptionId: this.id,
+        addOnCode: code,
+      })
+    }
+
+    const addOnUpdates = pendingChange.nextAddOns
+      .filter(addOn => addOn.code !== code)
+      .map(addOn => addOn.toAddOnUpdate())
+    addOnUpdates.push(reactivatedAddOn.toAddOnUpdate())
+
+    return new PaymentProviderSubscriptionChangeRequest({
+      subscription: this,
+      timeframe: 'term_end',
       addOnUpdates,
     })
   }
@@ -537,12 +579,14 @@ class PaymentProviderImmediateCharge {
    * @param {number} props.tax
    * @param {number} props.total
    * @param {number} props.discount
+   * @param {ImmediateChargeLineItem[]} [props.lineItems]
    */
   constructor(props) {
     this.subtotal = props.subtotal
     this.tax = props.tax
     this.total = props.total
     this.discount = props.discount
+    this.lineItems = props.lineItems ?? []
   }
 }
 
@@ -585,11 +629,15 @@ class PaymentProviderCoupon {
    * @param {string} props.code
    * @param {string} props.name
    * @param {string} [props.description]
+   * @param {boolean} [props.isSingleUse]
+   * @param {number | null} [props.discountMonths]
    */
   constructor(props) {
     this.code = props.code
     this.name = props.name
     this.description = props.description
+    this.isSingleUse = props.isSingleUse
+    this.discountMonths = props.discountMonths
   }
 }
 
@@ -601,12 +649,15 @@ class PaymentProviderAccount {
    * @param {object} props
    * @param {string} props.code
    * @param {string} props.email
-   * @param {boolean} props.hasPastDueInvoice
+   * @param {boolean} [props.hasPastDueInvoice]
+   * @param {object} [props.metadata]
+   * @param {string} [props.metadata.userId]
    */
   constructor(props) {
     this.code = props.code
     this.email = props.email
     this.hasPastDueInvoice = props.hasPastDueInvoice ?? false
+    this.metadata = props.metadata ?? {}
   }
 }
 

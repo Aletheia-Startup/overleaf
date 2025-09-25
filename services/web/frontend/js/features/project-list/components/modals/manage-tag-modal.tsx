@@ -13,12 +13,13 @@ import OLModal, {
   OLModalFooter,
   OLModalHeader,
   OLModalTitle,
-} from '@/features/ui/components/ol/ol-modal'
-import OLForm from '@/features/ui/components/ol/ol-form'
-import OLFormGroup from '@/features/ui/components/ol/ol-form-group'
-import OLFormLabel from '@/features/ui/components/ol/ol-form-label'
-import OLButton from '@/features/ui/components/ol/ol-button'
+} from '@/shared/components/ol/ol-modal'
+import OLForm from '@/shared/components/ol/ol-form'
+import OLFormGroup from '@/shared/components/ol/ol-form-group'
+import OLFormLabel from '@/shared/components/ol/ol-form-label'
+import OLButton from '@/shared/components/ol/ol-button'
 import Notification from '@/shared/components/notification'
+import OLFormControl from '@/shared/components/ol/ol-form-control'
 
 type ManageTagModalProps = {
   id: string
@@ -94,12 +95,12 @@ export function ManageTagModal({
 
       <OLModalBody>
         <OLForm onSubmit={handleSubmit}>
-          <OLFormGroup>
-            <input
+          <OLFormGroup controlId="manage-tag-modal">
+            <OLFormLabel>{t('manage_tag')}</OLFormLabel>
+            <OLFormControl
               ref={autoFocusedRef}
               className="form-control"
               type="text"
-              placeholder="Tag Name"
               name="new-tag-name"
               value={newTagName === undefined ? (tag.name ?? '') : newTagName}
               required
