@@ -86,6 +86,14 @@ services:
     networks:
       - overleaf-net
 
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cf-tunnel
+    restart: always
+    command: tunnel --no-autoupdate run --token ${CF_TOKEN}
+    networks:
+      - overleaf-net   
+
 volumes:
   mongo-data:
   redis-data:
