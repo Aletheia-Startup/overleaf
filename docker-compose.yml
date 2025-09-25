@@ -1,8 +1,8 @@
 services:
   sharelatex:
-    restart: always
     image: sharelatex/sharelatex
     container_name: sharelatex
+    restart: always
     depends_on:
       - mongo
       - redis
@@ -10,54 +10,85 @@ services:
       - "8081:80"
     stop_grace_period: 60s
     volumes:
-      - ./data:/var/lib/overleaf
+      # I progetti utenti li salviamo in una cartella locale leggibile
+      - ./data/overleaf:/var/lib/overleaf
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      OVERLEAF_APP_NAME: Overleaf Community Edition
-      OVERLEAF_MONGO_URL: mongodb://mongo/sharelatex?replicaSet=rs0
+      # --- Overleaf Basics ---
+      OVERLEAF_APP_NAME: Overleaf Aletheia
+      # OVERLEAF_SITE_LANGUAGE: it || Non funziona bene in italiano
+      OVERLEAF_SITE_URL: "${OVERLEAF_SITE_URL}"
+      OVERLEAF_MONGO_URL: "mongodb://mongo/sharelatex?replicaSet=rs0"
       OVERLEAF_REDIS_HOST: redis
       REDIS_HOST: redis
-      ENABLED_LINKED_FILE_TYPES: 'project_file,project_output_file'
-      ENABLE_CONVERSIONS: 'true'
-      EMAIL_CONFIRMATION_DISABLED: 'true'
-      SANDBOXED_COMPILES: 'false'
-      SANDBOXED_COMPILES_HOST_DIR_COMPILES: '/home/user/sharelatex_data/data/compiles'
-      SANDBOXED_COMPILES_HOST_DIR_OUTPUT: '/home/user/sharelatex_data/data/output'
-      SIBLING_CONTAINERS_ENABLED: 'false'
-      DOCKER_RUNNER: ''
-      SANDBOXED_COMPILES_SIBLING_CONTAINERS: 'false'
+
+      # --- Accounts & Registration ---
       OVERLEAF_ALLOW_PUBLIC_REGISTRATION: 'true'
       OVERLEAF_ALLOW_ANONYMOUS_READ_AND_WRITE_SHARING: 'true'
-      OVERLEAF_ADMIN_EMAIL: 'me@checcoconf.it'
+      OVERLEAF_ADMIN_EMAIL: "${OVERLEAF_ADMIN_EMAIL}"
       OVERLEAF_LEGACY_REGISTER_PAGE: 'true'
+
+      # --- Features ---
+      ENABLED_LINKED_FILE_TYPES: 'project_file,project_output_file'
+      ENABLE_CONVERSIONS: 'true'
+      SANDBOXED_COMPILES: 'false'
+      SIBLING_CONTAINERS_ENABLED: 'false'
+      SANDBOXED_COMPILES_SIBLING_CONTAINERS: 'false'
+      DOCKER_RUNNER: ''
+
+      # --- Email / SMTP ---
+      EMAIL_CONFIRMATION_DISABLED: 'false'
+      OVERLEAF_EMAIL_FROM_ADDRESS: "${SMTP_FROM}"
+      OVERLEAF_EMAIL_SMTP_HOST: "${SMTP_HOST}"
+      OVERLEAF_EMAIL_SMTP_PORT: "${SMTP_PORT}"
+      OVERLEAF_EMAIL_SMTP_SECURE: "${SMTP_SECURE}"
+      OVERLEAF_EMAIL_SMTP_USER: "${SMTP_USER}"
+      OVERLEAF_EMAIL_SMTP_PASS: "${SMTP_PASS}"
+
     networks:
       - overleaf-net
 
   mongo:
     image: mongo:6.0
+    platform: linux/amd64
+    container_name: mongo
     restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
-      - ./init-replica.sh:/docker-entrypoint-initdb.d/init-replica.sh
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     networks:
       - overleaf-net
 
+  mongo-init-replica:
+    image: mongo:6.0
+    platform: linux/amd64
+    container_name: mongo-init-replica
+    depends_on:
+      - mongo
+    restart: "no"
+    entrypoint: [ "bash", "-c", "/init-replica.sh" ]
+    volumes:
+      - ./init-replica.sh:/init-replica.sh:ro
+    networks:
+      - overleaf-net
+
+
   redis:
-    restart: unless-stopped
     image: redis:6.2
     container_name: redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
-      - ~/redis_data:/data
+      - redis-data:/data
     networks:
       - overleaf-net
 
 volumes:
   mongo-data:
+  redis-data:
 
 networks:
   overleaf-net:
